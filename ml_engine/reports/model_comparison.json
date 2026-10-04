@@ -1,0 +1,23 @@
+[
+    {
+        "Model": "XGBoost",
+        "MAE": 44.004,
+        "RMSE": 66.7494,
+        "MAPE (%)": 32.85,
+        "R2_Score": 0.9014
+    },
+    {
+        "Model": "Random Forest",
+        "MAE": 55.3025,
+        "RMSE": 83.4985,
+        "MAPE (%)": 27.06,
+        "R2_Score": 0.8458
+    },
+    {
+        "Model": "Linear Regression",
+        "MAE": 89.9683,
+        "RMSE": 120.913,
+        "MAPE (%)": 181.06,
+        "R2_Score": 0.6766
+    }
+]
