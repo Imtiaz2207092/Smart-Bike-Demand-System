@@ -5,6 +5,7 @@ from app.models import Station, StationSnapshot
 from app.routes.stations import router as station_router
 from app.routes.snapshots import router as snapshot_router
 from app.routes.status import router as status_router
+from app.routes.models import router as model_router
 
 
 Base.metadata.create_all(bind=engine)
@@ -26,6 +27,7 @@ app.add_middleware(
 app.include_router(status_router)
 app.include_router(station_router)
 app.include_router(snapshot_router)
+app.include_router(model_router)
 
 
 @app.get("/")

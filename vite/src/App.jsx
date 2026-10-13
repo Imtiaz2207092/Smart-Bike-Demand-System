@@ -1,41 +1,44 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
-  ArrowDownUp,
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
   Bike,
-  ChevronDown,
+  Check,
   CircleHelp,
+  Clock3,
+  Gauge,
   LayoutDashboard,
   MapPin,
   Menu,
   RefreshCw,
   Search,
-  Settings,
   ShieldCheck,
+  Sparkles,
   Truck,
   X,
 } from 'lucide-react'
-import { getStationStatus } from './services/api'
+import { getModelComparison, getStationStatus } from './services/api'
 
 const statusStyles = {
-  shortage: 'bg-red-50 text-red-700 ring-red-200',
-  balanced: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  surplus: 'bg-amber-50 text-amber-700 ring-amber-200',
-  no_data: 'bg-slate-100 text-slate-600 ring-slate-200',
+  shortage: 'status-shortage',
+  balanced: 'status-balanced',
+  surplus: 'status-surplus',
+  no_data: 'status-no-data',
 }
 
 const statusLabels = {
   shortage: 'Shortage',
   balanced: 'Balanced',
   surplus: 'Surplus',
-  no_data: 'No data',
+  no_data: 'Awaiting data',
 }
 
 const SIDEBAR_KEY = 'cycleflow.sidebarOpen'
 
 function getInitialSidebarState() {
-  // On phones/tablets the sidebar starts hidden (it opens as a drawer).
   if (typeof window !== 'undefined' && window.innerWidth < 1024) return false
   try {
     const saved = localStorage.getItem(SIDEBAR_KEY)
@@ -45,44 +48,179 @@ function getInitialSidebarState() {
   }
 }
 
-function StatCard({ title, value, subtitle, icon: Icon, color }) {
+function getTransferNeed(station) {
+  if (station.status !== 'shortage' || station.available_bikes === null) return 0
+  const thresholdToBalance = Math.floor(station.capacity * 0.2) + 1
+  return Math.max(0, thresholdToBalance - station.available_bikes)
+}
+
+function getTransferSurplus(station) {
+  if (station.status !== 'surplus' || station.available_bikes === null) return 0
+  const bikesToKeep = Math.ceil(station.capacity * 0.8) - 1
+  return Math.max(0, station.available_bikes - bikesToKeep)
+}
+
+function buildRedistributionPlan(stations) {
+  const recipients = stations
+    .filter((station) => station.status === 'shortage')
+    .map((station) => ({ station, remaining: getTransferNeed(station) }))
+    .sort((a, b) => b.remaining - a.remaining)
+  const donors = stations
+    .filter((station) => station.status === 'surplus')
+    .map((station) => ({ station, remaining: getTransferSurplus(station) }))
+    .sort((a, b) => b.remaining - a.remaining)
+  const plan = []
+
+  recipients.forEach((recipient) => {
+    donors.forEach((donor) => {
+      if (recipient.remaining <= 0 || donor.remaining <= 0) return
+      const bikes = Math.min(recipient.remaining, donor.remaining)
+      plan.push({
+        from: donor.station,
+        to: recipient.station,
+        bikes,
+      })
+      recipient.remaining -= bikes
+      donor.remaining -= bikes
+    })
+  })
+
+  return plan
+}
+
+function StatCard({ title, value, detail, icon: Icon, tone }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-500">{title}</p>
-          <p className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
-            {value}
-          </p>
-        </div>
-        <div className={`rounded-xl p-3 ${color}`}>
-          <Icon size={22} />
-        </div>
+    <article className="stat-card">
+      <div className={`stat-icon ${tone}`}>
+        <Icon size={19} strokeWidth={2} />
       </div>
-      <p className="mt-3 text-xs text-slate-500">{subtitle}</p>
+      <p className="stat-label">{title}</p>
+      <div className="stat-value">{value}</div>
+      <p className="stat-detail">{detail}</p>
+    </article>
+  )
+}
+
+function SectionHeading({ eyebrow, title, detail, action }) {
+  return (
+    <div className="section-heading">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h2>{title}</h2>
+        {detail && <p className="section-detail">{detail}</p>}
+      </div>
+      {action}
     </div>
   )
 }
 
-function NavItem({ icon: Icon, label, active = false }) {
+function StatusBadge({ status }) {
   return (
-    <div
-      className={`flex items-center gap-3 rounded-xl px-3 py-3 ${
-        active
-          ? 'bg-emerald-400/15 font-medium text-emerald-300'
-          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-      }`}
+    <span className={`status-badge ${statusStyles[status] || statusStyles.no_data}`}>
+      <span className="status-dot" />
+      {statusLabels[status] || status}
+    </span>
+  )
+}
+
+function StationCard({ station }) {
+  const hasSnapshot = station.available_bikes !== null
+  const percentage = hasSnapshot ? Number(station.bike_percentage) : null
+  const need = getTransferNeed(station)
+  const surplus = getTransferSurplus(station)
+  const recommendation = {
+    shortage: need > 0
+      ? `Dispatch ${need} ${need === 1 ? 'bike' : 'bikes'} to move above the 20% threshold.`
+      : 'Dispatch a bike to move above the shortage threshold.',
+    surplus: surplus > 0
+      ? `Stage up to ${surplus} ${surplus === 1 ? 'bike' : 'bikes'} for redistribution.`
+      : 'Review inventory for a potential transfer.',
+    balanced: 'No transfer needed. Continue routine monitoring.',
+    no_data: 'Verify station telemetry before planning a dispatch.',
+  }[station.status] || 'Review the station status.'
+
+  return (
+    <article className={`station-card station-card-${station.status}`}>
+      <div className="station-card-top">
+        <div className="station-identity">
+          <span className="station-pin"><MapPin size={16} /></span>
+          <div className="station-names">
+            <h3 title={station.station_name}>{station.station_name}</h3>
+            <span>{station.station_id}</span>
+          </div>
+        </div>
+        <StatusBadge status={station.status} />
+      </div>
+
+      <div className="bike-count-row">
+        <div>
+          <span className="data-caption">Bikes available</span>
+          <p className="bike-count">
+            {station.available_bikes ?? '—'}
+            <span> / {station.capacity}</span>
+          </p>
+        </div>
+        <div className="occupancy-value">
+          <span className="data-caption">Occupancy</span>
+          <strong>{hasSnapshot ? `${percentage}%` : '—'}</strong>
+        </div>
+      </div>
+
+      <div
+        className="occupancy-track"
+        role="progressbar"
+        aria-label={`${station.station_name} occupancy`}
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow={hasSnapshot ? Math.min(percentage, 100) : 0}
+      >
+        <span
+          className={`occupancy-fill fill-${station.status}`}
+          style={{ width: `${hasSnapshot ? Math.min(Math.max(percentage, 0), 100) : 0}%` }}
+        />
+      </div>
+
+      <div className="station-meta">
+        <span><Bike size={14} /> Capacity <strong>{station.capacity}</strong></span>
+        <span><Activity size={14} /> Docks <strong>{station.available_docks ?? '—'}</strong></span>
+      </div>
+
+      <div className={`station-recommendation recommendation-${station.status}`}>
+        <span className="recommendation-icon">
+          {station.status === 'shortage'
+            ? <ArrowDownRight size={16} />
+            : station.status === 'surplus'
+              ? <ArrowUpRight size={16} />
+              : station.status === 'balanced'
+                ? <Check size={16} />
+                : <CircleHelp size={16} />}
+        </span>
+        <p>{recommendation}</p>
+      </div>
+    </article>
+  )
+}
+
+function NavLink({ href, icon: Icon, children, active, onClick }) {
+  return (
+    <a
+      href={href}
+      className={`nav-link${active ? ' nav-link-active' : ''}`}
+      onClick={onClick}
     >
-      <Icon size={19} />
-      {label}
-    </div>
+      <Icon size={18} strokeWidth={1.8} />
+      {children}
+    </a>
   )
 }
 
 function App() {
   const [stations, setStations] = useState([])
+  const [models, setModels] = useState([])
   const [loading, setLoading] = useState(true)
+  const [modelsLoading, setModelsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [modelError, setModelError] = useState('')
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [lastUpdated, setLastUpdated] = useState(null)
@@ -92,35 +230,22 @@ function App() {
     setSidebarOpen((open) => {
       const next = !open
       try {
-        // Only remember the choice made on desktop-sized screens.
         if (window.innerWidth >= 1024) {
           localStorage.setItem(SIDEBAR_KEY, String(next))
         }
       } catch {
-        /* storage unavailable, ignore */
+        // Storage may be unavailable in private browsing.
       }
       return next
     })
   }, [])
 
-  // Close the drawer with the Escape key (mobile).
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape' && window.innerWidth < 1024) {
-        setSidebarOpen(false)
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
-
   const loadStations = useCallback(async () => {
-    setLoading(true)
-    setError('')
-
     try {
       const data = await getStationStatus()
+      if (!Array.isArray(data)) throw new Error('The station API returned an unexpected response.')
       setStations(data)
+      setError('')
       setLastUpdated(new Date())
     } catch (err) {
       setError(err.message || 'Could not connect to the backend.')
@@ -129,355 +254,492 @@ function App() {
     }
   }, [])
 
+  const loadModels = useCallback(async () => {
+    try {
+      const data = await getModelComparison()
+      if (!Array.isArray(data)) throw new Error('The model report returned an unexpected response.')
+      setModels(data)
+      setModelError('')
+    } catch (err) {
+      setModelError(err.message || 'Could not load the model comparison report.')
+    } finally {
+      setModelsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
-    loadStations()
-  }, [loadStations])
+    const initialLoad = window.setTimeout(() => {
+      loadStations()
+      loadModels()
+    }, 0)
+    const interval = window.setInterval(() => {
+      setLoading(true)
+      loadStations()
+    }, 60_000)
+    return () => {
+      window.clearTimeout(initialLoad)
+      window.clearInterval(interval)
+    }
+  }, [loadModels, loadStations])
 
-  const knownStations = stations.filter(
-    (station) => station.available_bikes !== null
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape' && window.innerWidth < 1024) setSidebarOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  const knownStations = useMemo(
+    () => stations.filter((station) => station.available_bikes !== null),
+    [stations],
   )
-
   const totalBikes = knownStations.reduce(
-    (sum, station) => sum + station.available_bikes,
-    0
+    (sum, station) => sum + (Number(station.available_bikes) || 0),
+    0,
   )
+  const shortageCount = stations.filter((station) => station.status === 'shortage').length
+  const balancedCount = stations.filter((station) => station.status === 'balanced').length
+  const surplusCount = stations.filter((station) => station.status === 'surplus').length
+  const averageOccupancy = knownStations.length
+    ? Math.round(knownStations.reduce(
+      (sum, station) => sum + (Number(station.bike_percentage) || 0),
+      0,
+    ) / knownStations.length)
+    : 0
 
-  const shortageCount = stations.filter(
-    (station) => station.status === 'shortage'
-  ).length
+  const filteredStations = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return stations.filter((station) => {
+      const matchesSearch = !query
+        || station.station_name.toLowerCase().includes(query)
+        || station.station_id.toLowerCase().includes(query)
+      return matchesSearch && (filter === 'all' || station.status === filter)
+    })
+  }, [filter, search, stations])
 
-  const surplusCount = stations.filter(
-    (station) => station.status === 'surplus'
-  ).length
-
-  const filteredStations = stations.filter((station) => {
-    const matchesSearch =
-      station.station_name.toLowerCase().includes(search.toLowerCase()) ||
-      station.station_id.toLowerCase().includes(search.toLowerCase())
-
-    const matchesFilter = filter === 'all' || station.status === filter
-
-    return matchesSearch && matchesFilter
-  })
+  const redistributionPlan = useMemo(
+    () => buildRedistributionPlan(stations),
+    [stations],
+  )
+  const bestModel = models.reduce((best, model) => (
+    !best || Number(model.RMSE) < Number(best.RMSE) ? model : best
+  ), null)
+  const pulseStations = [...knownStations]
+    .sort((a, b) => Number(b.bike_percentage) - Number(a.bike_percentage))
+    .slice(0, 6)
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800">
-      {/* Backdrop: only on small screens while the drawer is open */}
+    <div className="app-shell">
       <div
         onClick={() => setSidebarOpen(false)}
         aria-hidden="true"
-        className={`fixed inset-0 z-20 bg-slate-950/50 transition-opacity duration-300 lg:hidden ${
-          sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
+        className={`sidebar-backdrop${sidebarOpen ? ' backdrop-visible' : ''}`}
       />
 
-      <aside
-        aria-hidden={!sidebarOpen}
-        className={`fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-slate-950 text-white transition-transform duration-300 ease-in-out ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <div className="flex h-20 items-center justify-between gap-3 border-b border-white/10 px-6">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-emerald-400 p-2 text-slate-950">
-              <Bike size={25} />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight">CycleFlow</h1>
-              <p className="text-xs text-slate-400">SMART BIKE SYSTEM</p>
-            </div>
-          </div>
+      <aside className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`} aria-label="Main navigation">
+        <div className="brand">
+          <a className="brand-main" href="#overview" onClick={() => setSidebarOpen(false)}>
+            <span className="brand-mark"><Bike size={23} strokeWidth={2.1} /></span>
+            <span className="brand-copy">
+              <strong>cycleflow<span>.</span></strong>
+              <small>URBAN MOBILITY INTELLIGENCE</small>
+            </span>
+          </a>
           <button
-            onClick={toggleSidebar}
-            aria-label="Hide sidebar"
-            title="Hide sidebar"
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+            className="sidebar-close"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close navigation"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="px-4 py-7">
-          <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
-            Workspace
-          </p>
-          <nav className="space-y-1">
-            <NavItem icon={LayoutDashboard} label="Dashboard" active />
-            <NavItem icon={MapPin} label="Stations" />
-            <NavItem icon={Activity} label="Demand Forecasting" />
-            <NavItem icon={Truck} label="Redistribution" />
-            <NavItem icon={ArrowDownUp} label="History & Reports" />
-          </nav>
-        </div>
+        <div className="workspace-label">CONTROL CENTER</div>
+        <nav className="primary-nav">
+          <NavLink href="#overview" icon={LayoutDashboard} active onClick={() => setSidebarOpen(false)}>
+            Overview
+          </NavLink>
+          <NavLink href="#stations" icon={MapPin} onClick={() => setSidebarOpen(false)}>
+            Station network
+          </NavLink>
+          <NavLink href="#forecast" icon={Activity} onClick={() => setSidebarOpen(false)}>
+            Forecast &amp; models
+          </NavLink>
+          <NavLink href="#redistribution" icon={Truck} onClick={() => setSidebarOpen(false)}>
+            Redistribution
+          </NavLink>
+        </nav>
 
-        <div className="mt-auto border-t border-white/10 p-4">
-          <div className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
-            <ShieldCheck className="text-emerald-300" size={22} />
+        <div className="sidebar-bottom">
+          <div className={`sidebar-health${error ? ' health-error' : ''}`}>
+            <span className="health-icon"><ShieldCheck size={18} /></span>
             <div>
-              <p className="text-sm font-medium">System status</p>
-              <p className="text-xs text-slate-400">API connection checked on refresh</p>
+              <strong>{error ? 'Connection issue' : 'System monitoring'}</strong>
+              <span>{error ? 'API needs attention' : 'Station API connected'}</span>
             </div>
+            <span className="health-indicator" />
           </div>
-          <div className="mt-2 flex items-center gap-3 px-3 py-3 text-sm text-slate-400">
-            <Settings size={18} />
-            Settings
-          </div>
+          <p className="sidebar-footnote">SMART BIKE DEMAND SYSTEM <span>·</span> LIVE OPERATIONS</p>
         </div>
       </aside>
 
-      <main
-        className={`transition-[margin] duration-300 ease-in-out ${
-          sidebarOpen ? 'lg:ml-64' : 'lg:ml-0'
-        }`}
-      >
-        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-5 sm:px-8">
-          <div className="flex items-center gap-4">
+      <main className={`main-content${sidebarOpen ? ' main-content-shifted' : ''}`}>
+        <header className="topbar">
+          <div className="topbar-left">
             <button
+              className="icon-button menu-button"
               onClick={toggleSidebar}
-              aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+              aria-label={sidebarOpen ? 'Hide navigation' : 'Show navigation'}
               aria-expanded={sidebarOpen}
-              title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-              className="rounded-xl border border-slate-200 p-2.5 text-slate-600 transition hover:bg-slate-100"
             >
-              <Menu size={20} />
+              <Menu size={19} />
             </button>
-            <div>
-              <p className="text-sm text-slate-500">Operations / Overview</p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
-                Operations Dashboard
-              </h2>
-            </div>
+            <div className="breadcrumbs"><span>Operations</span><span className="breadcrumb-slash">/</span> Fleet overview</div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold text-slate-800">Fleet operator</p>
-              <p className="text-xs text-slate-500">Administrator</p>
+          <div className="topbar-right">
+            <span className={`connection-pill${error ? ' connection-error' : ''}`}>
+              <span className="live-dot" />
+              {error ? 'API attention' : 'Live system'}
+            </span>
+            <span className="topbar-divider" />
+            <div className="operator">
+              <span className="operator-avatar">FO</span>
+              <span><strong>Fleet operator</strong><small>Operations</small></span>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 font-bold text-slate-700">
-              FO
-            </div>
-            <ChevronDown size={17} className="text-slate-500" />
           </div>
         </header>
 
-        <div className="space-y-7 p-5 sm:p-8">
-          <section className="flex flex-wrap items-end justify-between gap-4">
+        <div className="dashboard-content">
+          <section id="overview" className="welcome-row">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">
-                Fleet overview
-              </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Monitor station availability and identify where action is needed.
+              <p className="eyebrow">CITY MOBILITY · OPERATIONS CENTER</p>
+              <h1>Your fleet, <span>in motion.</span></h1>
+              <p className="welcome-description">
+                A real-time view of station health, bike availability and where your team can make a difference.
               </p>
             </div>
-            <button
-              onClick={loadStations}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-50"
-            >
-              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-              Refresh data
-            </button>
+            <div className="refresh-block">
+              <span className="updated-label">
+                <Clock3 size={14} />
+                {lastUpdated
+                  ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  : loading ? 'Connecting to station network' : 'Waiting for station data'}
+              </span>
+              <button
+                className="refresh-button"
+                onClick={() => {
+                  setLoading(true)
+                  loadStations()
+                }}
+                disabled={loading}
+              >
+                <RefreshCw size={15} className={loading ? 'spin' : ''} />
+                Refresh network
+              </button>
+            </div>
           </section>
 
           {error && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div className="error-banner" role="alert">
+              <AlertTriangle size={18} />
               <span>{error}. Check that FastAPI is running on port 8000.</span>
-              <button onClick={loadStations} className="font-semibold underline">
-                Try again
+              <button
+                onClick={() => {
+                  setLoading(true)
+                  loadStations()
+                }}
+              >
+                Retry connection
               </button>
             </div>
           )}
 
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="stats-grid" aria-label="Fleet summary">
             <StatCard
               title="Total stations"
               value={loading && stations.length === 0 ? '—' : stations.length}
-              subtitle="Registered bicycle stations"
+              detail={`${knownStations.length} reporting live snapshots`}
               icon={MapPin}
-              color="bg-blue-50 text-blue-700"
+              tone="tone-blue"
             />
             <StatCard
-              title="Available bikes"
-              value={loading && stations.length === 0 ? '—' : totalBikes}
-              subtitle={`Recorded at ${knownStations.length} station(s)`}
-              icon={Bike}
-              color="bg-emerald-50 text-emerald-700"
+              title="Balanced"
+              value={balancedCount}
+              detail="Within operating range"
+              icon={Check}
+              tone="tone-green"
             />
             <StatCard
-              title="Shortage stations"
+              title="Shortage"
               value={shortageCount}
-              subtitle="Stations needing more bikes"
-              icon={AlertTriangle}
-              color="bg-red-50 text-red-700"
+              detail="Stations below 20% capacity"
+              icon={ArrowDownRight}
+              tone="tone-red"
             />
             <StatCard
-              title="Surplus stations"
+              title="Surplus"
               value={surplusCount}
-              subtitle="Stations with extra bikes"
-              icon={Truck}
-              color="bg-amber-50 text-amber-700"
+              detail="Stations above 80% capacity"
+              icon={ArrowUpRight}
+              tone="tone-amber"
+            />
+            <StatCard
+              title="System health"
+              value={error ? 'Attention' : lastUpdated ? 'Online' : loading ? 'Checking' : 'Offline'}
+              detail={error ? 'Station API unavailable' : 'Station API connection'}
+              icon={Gauge}
+              tone={error ? 'tone-red' : 'tone-green'}
             />
           </section>
 
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 p-5">
-              <div>
-                <h3 className="font-semibold text-slate-900">Station status</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Latest recorded availability for each station
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <div className="relative">
-                  <Search
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
-                  <input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search stations..."
-                    className="w-52 rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <select
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500"
-                >
-                  <option value="all">Show All</option>
-                  <option value="shortage">Shortage</option>
-                  <option value="balanced">Balanced</option>
-                  <option value="surplus">Surplus</option>
-                  <option value="no_data">No data</option>
-                </select>
-              </div>
+          <section className="network-ribbon" aria-label="Fleet snapshot">
+            <div className="ribbon-copy">
+              <span className="ribbon-icon"><Bike size={19} /></span>
+              <span><strong>{totalBikes.toLocaleString()}</strong><small>bikes available across reporting stations</small></span>
             </div>
+            <div className="ribbon-divider" />
+            <div className="ribbon-copy">
+              <span className="ribbon-icon ribbon-icon-light"><Activity size={18} /></span>
+              <span><strong>{knownStations.length ? `${averageOccupancy}%` : '—'}</strong><small>average station occupancy</small></span>
+            </div>
+            <span className="snapshot-note"><span className="live-dot" /> Snapshot-based monitoring · auto-refreshes every 60 seconds</span>
+          </section>
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
-                  <tr>
-                    <th className="px-5 py-4 font-semibold">Station</th>
-                    <th className="px-5 py-4 font-semibold">Capacity</th>
-                    <th className="px-5 py-4 font-semibold">Available Bikes</th>
-                    <th className="px-5 py-4 font-semibold">Availability</th>
-                    <th className="px-5 py-4 font-semibold">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {!loading && !error && filteredStations.map((station) => (
-                    <tr key={station.station_id} className="transition hover:bg-slate-50">
-                      <td className="px-5 py-4">
-                        <p className="font-semibold text-slate-800">
-                          {station.station_name}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {station.station_id}
-                        </p>
-                      </td>
-                      <td className="px-5 py-4 text-slate-600">
-                        {station.capacity}
-                      </td>
-                      <td className="px-5 py-4 font-medium text-slate-800">
-                        {station.available_bikes ?? '—'}
-                        <span className="font-normal text-slate-400">
-                          {' '}/ {station.capacity}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        {station.bike_percentage === null ? (
-                          <span className="text-slate-400">No snapshot</span>
-                        ) : (
-                          <div className="flex items-center gap-3">
-                            <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100">
-                              <div
-                                className="h-full rounded-full bg-emerald-500"
-                                style={{
-                                  width: `${Math.min(station.bike_percentage, 100)}%`,
-                                }}
-                              />
-                            </div>
-                            <span className="text-slate-600">
-                              {station.bike_percentage}%
-                            </span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-5 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${
-                            statusStyles[station.status] || statusStyles.no_data
-                          }`}
-                        >
-                          {statusLabels[station.status] || station.status}
-                        </span>
-                      </td>
-                    </tr>
+          <section className="analytics-grid" aria-label="Network analytics">
+            <article className="panel pulse-panel">
+              <SectionHeading
+                eyebrow="LIVE NETWORK"
+                title="Capacity pulse"
+                detail="Station occupancy from the latest available snapshot."
+                action={<span className="panel-count">{knownStations.length} reporting</span>}
+              />
+              {pulseStations.length > 0 ? (
+                <div className="pulse-list">
+                  {pulseStations.map((station) => (
+                    <div className="pulse-row" key={station.station_id}>
+                      <span className="pulse-name" title={station.station_name}>{station.station_name}</span>
+                      <span className="pulse-track"><span
+                        className={`pulse-fill fill-${station.status}`}
+                        style={{ width: `${Math.min(Math.max(Number(station.bike_percentage) || 0, 0), 100)}%` }}
+                      /></span>
+                      <strong className="pulse-value">{station.bike_percentage}%</strong>
+                    </div>
                   ))}
+                </div>
+              ) : (
+                <div className="empty-inline">{loading ? 'Loading station snapshots…' : 'No station snapshots are available yet.'}</div>
+              )}
+              {knownStations.length > pulseStations.length && (
+                <p className="panel-footnote">Showing highest-occupancy stations · all stations are listed below.</p>
+              )}
+              <div className="capacity-legend">
+                <span><i className="legend-dot legend-low" /> Low &lt;20%</span>
+                <span><i className="legend-dot legend-balanced" /> Balanced</span>
+                <span><i className="legend-dot legend-high" /> High &gt;80%</span>
+              </div>
+            </article>
 
-                  {loading && (
-                    <tr>
-                      <td colSpan="5" className="px-5 py-12 text-center text-slate-500">
-                        Loading station data...
-                      </td>
-                    </tr>
-                  )}
+            <article className="panel intelligence-panel" id="forecast">
+              <div className="intelligence-top">
+                <span className="intelligence-icon"><Sparkles size={18} /></span>
+                <span className="intelligence-label">FORECAST INTELLIGENCE</span>
+                <span className="evaluation-tag">MODEL EVALUATION</span>
+              </div>
+              {modelsLoading ? (
+                <div className="intelligence-main"><strong>Loading model report…</strong></div>
+              ) : modelError ? (
+                <div className="intelligence-main">
+                  <strong>Model report unavailable</strong>
+                  <p>{modelError}</p>
+                </div>
+              ) : bestModel ? (
+                <>
+                  <div className="intelligence-main">
+                    <span>Best model by lowest RMSE</span>
+                    <strong>{bestModel.Model}</strong>
+                    <p>Evaluation R² <b>{Number(bestModel.R2_Score).toFixed(4)}</b> · MAPE <b>{Number(bestModel['MAPE (%)']).toFixed(2)}%</b></p>
+                  </div>
+                  <div className="intelligence-metrics">
+                    <div><span>MAE</span><strong>{Number(bestModel.MAE).toFixed(2)}</strong></div>
+                    <div><span>RMSE</span><strong>{Number(bestModel.RMSE).toFixed(2)}</strong></div>
+                    <div><span>R² score</span><strong>{Number(bestModel.R2_Score).toFixed(4)}</strong></div>
+                  </div>
+                </>
+              ) : (
+                <div className="intelligence-main"><strong>No evaluation results available</strong></div>
+              )}
+              <p className="intelligence-note">
+                Metrics are from the saved ML evaluation report. Live demand predictions are not currently exposed by the API.
+              </p>
+            </article>
+          </section>
 
-                  {!loading && !error && filteredStations.length === 0 && (
-                    <tr>
-                      <td colSpan="5" className="px-5 py-12 text-center text-slate-500">
-                        No stations match your search.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          <section id="stations" className="stations-section">
+            <SectionHeading
+              eyebrow="THE CITY NETWORK"
+              title="Station overview"
+              detail="Every station, its live capacity and the next operational step."
+              action={
+                <div className="station-controls">
+                  <label className="search-control">
+                    <Search size={16} />
+                    <input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Search stations"
+                      aria-label="Search stations"
+                    />
+                  </label>
+                  <select
+                    value={filter}
+                    onChange={(event) => setFilter(event.target.value)}
+                    aria-label="Filter stations by status"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="shortage">Shortage</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="surplus">Surplus</option>
+                    <option value="no_data">Awaiting data</option>
+                  </select>
+                </div>
+              }
+            />
 
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-5 py-4 text-xs text-slate-500">
-              <span>
-                Showing {filteredStations.length} of {stations.length} stations
-              </span>
-              <span>
-                {lastUpdated
-                  ? `Last refreshed at ${lastUpdated.toLocaleTimeString()}`
-                  : 'Waiting for station data'}
-              </span>
+            {loading && stations.length === 0 ? (
+              <div className="station-empty"><RefreshCw size={19} className="spin" /> Connecting to the station network…</div>
+            ) : error && stations.length === 0 ? (
+              <div className="station-empty">Station data is unavailable. Retry the API connection above.</div>
+            ) : filteredStations.length > 0 ? (
+              <div className="station-grid">
+                {filteredStations.map((station) => (
+                  <StationCard key={station.station_id} station={station} />
+                ))}
+              </div>
+            ) : (
+              <div className="station-empty">No stations match your search or selected status.</div>
+            )}
+            <div className="station-list-footer">
+              <span>Showing <strong>{filteredStations.length}</strong> of <strong>{stations.length}</strong> stations</span>
+              <span>Each station card reflects its latest backend snapshot.</span>
             </div>
           </section>
 
-          <section className="grid gap-4 md:grid-cols-2">
-            <div className="flex gap-4 rounded-2xl border border-slate-200 bg-white p-5">
-              <div className="h-fit rounded-xl bg-blue-50 p-3 text-blue-700">
-                <CircleHelp size={22} />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-900">Data coverage</h3>
-                <p className="mt-1 text-sm leading-6 text-slate-500">
-                  {knownStations.length} of {stations.length} stations currently have
-                  recorded availability. Stations without snapshots are marked
-                  “No data” and are excluded from the bike total.
+          <section id="redistribution" className="redistribution-section">
+            <SectionHeading
+              eyebrow="FIELD OPERATIONS"
+              title="Redistribution desk"
+              detail="Threshold-based transfer suggestions using the current station snapshot."
+            />
+            <div className="redistribution-layout">
+              <article className="panel flow-panel">
+                <div className="flow-panel-heading">
+                  <div>
+                    <h3>Suggested bike movements</h3>
+                    <p>Surplus stations → stations needing support</p>
+                  </div>
+                  <span className="suggestion-count">{redistributionPlan.length} {redistributionPlan.length === 1 ? 'suggestion' : 'suggestions'}</span>
+                </div>
+                {redistributionPlan.length > 0 ? (
+                  <div className="flow-list">
+                    {redistributionPlan.map((flow, index) => (
+                      <div className="flow-row" key={`${flow.from.station_id}-${flow.to.station_id}-${index}`}>
+                        <div className="flow-station flow-donor">
+                          <span className="flow-station-icon"><Bike size={15} /></span>
+                          <span><strong>{flow.from.station_name}</strong><small>Surplus · {flow.from.available_bikes} bikes now</small></span>
+                        </div>
+                        <div className="flow-middle">
+                          <span>{flow.bikes} {flow.bikes === 1 ? 'bike' : 'bikes'}</span>
+                          <span className="flow-arrow"><ArrowRight size={17} /></span>
+                        </div>
+                        <div className="flow-station flow-recipient">
+                          <span className="flow-station-icon"><MapPin size={15} /></span>
+                          <span><strong>{flow.to.station_name}</strong><small>Shortage · {flow.to.available_bikes} bikes now</small></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="no-flows">
+                    <span><Check size={18} /></span>
+                    <div><strong>{stations.length === 0 ? 'Station data is needed first' : 'No threshold-based transfer pairs'}</strong>
+                      <p>{stations.length === 0
+                        ? 'Connect to the station API to generate an operational plan.'
+                        : shortageCount === 0 && surplusCount === 0
+                          ? 'No reported shortages or surpluses. The network is within its operating thresholds.'
+                          : 'Shortages or surpluses exist, but there is no opposite-status station to pair with.'}</p>
+                    </div>
+                  </div>
+                )}
+                <p className="flow-disclaimer">
+                  Planning aid only: quantities move stations just across the API’s 20% / 80% status thresholds. No ML forecast, route optimization or transfer execution is implied.
                 </p>
-              </div>
-            </div>
-            <div className="flex gap-4 rounded-2xl border border-slate-200 bg-white p-5">
-              <div className="h-fit rounded-xl bg-emerald-50 p-3 text-emerald-700">
-                <Truck size={22} />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-900">
-                  Redistribution planning
-                </h3>
-                <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Recommendations will appear here after we implement the
-                  redistribution API. No bike transfers are performed by this
-                  dashboard yet.
-                </p>
-              </div>
+              </article>
+
+              <aside className="dispatch-card">
+                <div className="dispatch-mark"><Truck size={20} /></div>
+                <p className="eyebrow">DISPATCH SNAPSHOT</p>
+                <strong>{redistributionPlan.reduce((sum, flow) => sum + flow.bikes, 0)}</strong>
+                <span>bikes in suggested transfers</span>
+                <div className="dispatch-rule" />
+                <div className="dispatch-rows">
+                  <span><i className="legend-dot legend-low" /> Shortage stations <b>{shortageCount}</b></span>
+                  <span><i className="legend-dot legend-high" /> Surplus stations <b>{surplusCount}</b></span>
+                </div>
+                <p className="dispatch-footnote">Review suggestions with your field team before dispatch.</p>
+              </aside>
             </div>
           </section>
+
+          <section className="model-section" aria-labelledby="model-comparison-title">
+            <SectionHeading
+              eyebrow="PREDICTIVE PERFORMANCE"
+              title="Model comparison"
+              detail="Evaluation metrics loaded from the ML engine’s saved comparison report."
+              action={<span className="report-chip"><Activity size={14} /> ML ENGINE REPORT</span>}
+            />
+            <article className="panel model-table-panel">
+              {modelsLoading ? (
+                <div className="station-empty">Loading model evaluation report…</div>
+              ) : modelError ? (
+                <div className="model-error" role="alert">
+                  <CircleHelp size={18} /><span>{modelError}</span>
+                </div>
+              ) : models.length > 0 ? (
+                <div className="model-table-scroll">
+                  <table className="model-table">
+                    <thead>
+                      <tr><th>Model</th><th>MAE <span>↓ lower is better</span></th><th>RMSE <span>↓ lower is better</span></th><th>MAPE <span>↓ lower is better</span></th><th>R² score <span>↑ higher is better</span></th></tr>
+                    </thead>
+                    <tbody>
+                      {models.map((model) => (
+                        <tr key={model.Model} className={model.Model === bestModel?.Model ? 'best-model-row' : ''}>
+                          <td><span className="model-name"><span className="model-dot" />{model.Model}{model.Model === bestModel?.Model && <span className="best-tag">TOP RMSE</span>}</span></td>
+                          <td>{Number(model.MAE).toFixed(4)}</td>
+                          <td>{Number(model.RMSE).toFixed(4)}</td>
+                          <td>{Number(model['MAPE (%)']).toFixed(2)}%</td>
+                          <td>{Number(model.R2_Score).toFixed(4)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="station-empty">No model metrics are available in the ML report.</div>
+              )}
+              {!modelError && models.length > 0 && (
+                <div className="model-table-footer">
+                  <span><ShieldCheck size={15} /> Metrics generated by the ML evaluation pipeline</span>
+                  <span>MAE = mean absolute error · RMSE = root mean square error · MAPE = mean absolute percentage error</span>
+                </div>
+              )}
+            </article>
+          </section>
+
+          <footer className="dashboard-footer">
+            <span>CycleFlow <i>·</i> Smart Bike Demand System</span>
+            <span><span className={`live-dot${error ? ' live-dot-error' : ''}`} /> {error ? 'Backend connection needs attention' : 'Connected to the station operations API'}</span>
+          </footer>
         </div>
       </main>
     </div>
