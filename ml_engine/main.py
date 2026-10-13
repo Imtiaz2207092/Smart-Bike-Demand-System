@@ -1,8 +1,8 @@
 """
-Main Pipeline Execution Script (50% Milestone Execution)
+Main Pipeline Execution Script 
 Author: Imtiaj Ahmad (Roll: 2207092)
 
-Phase 1 (First 50% Sequence):
+Phase 1 
 1. Data Ingestion & Cleaning (data_cleaning.py)
 2. Feature Engineering (feature_engineering.py)
 3. Model Development & Training (models.py)
