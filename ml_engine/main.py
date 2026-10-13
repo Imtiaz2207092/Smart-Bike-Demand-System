@@ -11,16 +11,19 @@ Phase 1 (First 50% Sequence):
 import os
 import sys
 
+import pandas as pd
+
 # Add workspace root to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from ml_engine.src.data_cleaning import load_and_clean_data
 from ml_engine.src.feature_engineering import extract_features, get_feature_columns
 from ml_engine.src.models import BikeDemandModelTrainer
+from ml_engine.src.redistribution import detect_shortage_surplus, recommend_redistribution
 
 def run_ml_pipeline():
     print("=" * 60)
-    print("      SMART BIKE DEMAND SYSTEM - ML ENGINE (50% MILESTONE)      ")
+    print("      SMART BIKE DEMAND SYSTEM - ML ENGINE      ")
     print("            Developer: Imtiaj Ahmad (Roll: 2207092)             ")
     print("=" * 60)
 
@@ -64,8 +67,23 @@ def run_ml_pipeline():
         saved_path = trainer.save_model(model_name)
         print(f"[OK] Saved {model_name} model to {saved_path}")
 
+    print("\n[Step 4/4] Shortage/Surplus Detection & Redistribution...")
+    demo_stations = pd.DataFrame([
+        {'station_id': 'A', 'available_bikes': 5, 'predicted_demand': 18},
+        {'station_id': 'B', 'available_bikes': 25, 'predicted_demand': 8},
+        {'station_id': 'C', 'available_bikes': 12, 'predicted_demand': 7},
+        {'station_id': 'D', 'available_bikes': 16, 'predicted_demand': 20}
+    ])
+    shortage_df, surplus_df = detect_shortage_surplus(demo_stations)
+    recommendations = recommend_redistribution(demo_stations)
+    print(f"[OK] Shortage stations detected: {len(shortage_df)}")
+    print(f"[OK] Surplus stations detected: {len(surplus_df)}")
+    print(f"[OK] Redistribution recommendations generated: {len(recommendations)}")
+    for rec in recommendations[:3]:
+        print(f"     - Move {rec['bikes_to_move']} bikes from {rec['from_station']} to {rec['to_station']} ({rec['distance_km']} km)")
+
     print("\n" + "=" * 60)
-    print("  SUCCESS: 50% MILESTONE OF ML PIPELINE COMPLETED SUCCESSFULLY!")
+    print("  SUCCESS: ML PIPELINE COMPLETED SUCCESSFULLY!")
     print("=" * 60)
 
 if __name__ == "__main__":
