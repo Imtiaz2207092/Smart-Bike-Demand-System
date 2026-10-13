@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from app.database import Base, engine
 from app.models import Station, StationSnapshot
 from app.routes.stations import router as station_router
