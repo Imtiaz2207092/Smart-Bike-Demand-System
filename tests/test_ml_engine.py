@@ -10,6 +10,7 @@ import numpy as np
 from ml_engine.src.data_cleaning import load_and_clean_data
 from ml_engine.src.feature_engineering import extract_features
 from ml_engine.src.evaluation import calculate_metrics
+from ml_engine.src.redistribution import detect_shortage_surplus, recommend_redistribution
 
 def test_data_cleaning():
     train_path = "ml_engine/data/train.csv"
@@ -40,3 +41,20 @@ def test_metrics_calculation():
     y_pred = np.array([12, 18, 32, 38, 52])
     metrics = calculate_metrics(y_true, y_pred)
     assert metrics['MAE'] == 2.0
+
+
+def test_shortage_surplus_and_recommendation():
+    stations = pd.DataFrame([
+        {'station_id': 'A', 'available_bikes': 5, 'predicted_demand': 18},
+        {'station_id': 'B', 'available_bikes': 25, 'predicted_demand': 8},
+        {'station_id': 'C', 'available_bikes': 12, 'predicted_demand': 7}
+    ])
+
+    shortage, surplus = detect_shortage_surplus(stations)
+    assert 'A' in shortage['station_id'].values
+    assert 'B' in surplus['station_id'].values
+
+    recommendations = recommend_redistribution(stations)
+    assert isinstance(recommendations, list)
+    assert len(recommendations) >= 1
+    assert recommendations[0]['from_station'] == 'B'
