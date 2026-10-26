@@ -20,7 +20,7 @@ import {
   Truck,
   X,
 } from 'lucide-react'
-import { getModelComparison, getStationStatus } from './services/api'
+import { getModelComparison, getLiveStations } from './services/api'
 
 const statusStyles = {
   shortage: 'status-shortage',
@@ -166,6 +166,11 @@ function StationCard({ station }) {
         </div>
       </div>
 
+      <div className="station-meta">
+        <span><Bike size={14} /> E-bikes <strong>{station.available_e_bikes ?? '—'}</strong></span>
+        <span><Bike size={14} /> Mechanical <strong>{station.available_mechanical_bikes ?? '—'}</strong></span>
+      </div>
+
       <div
         className="occupancy-track"
         role="progressbar"
@@ -181,8 +186,12 @@ function StationCard({ station }) {
       </div>
 
       <div className="station-meta">
-        <span><Bike size={14} /> Capacity <strong>{station.capacity}</strong></span>
+        <span><Bike size={14} /> Capacity <strong>{station.capacity ?? '—'}</strong></span>
         <span><Activity size={14} /> Docks <strong>{station.available_docks ?? '—'}</strong></span>
+      </div>
+      <div className="station-meta">
+        <span><Gauge size={14} /> Source <strong>{station.source === 'capital_bikeshare_gbfs' ? 'Official GBFS' : station.source || 'Local'}</strong></span>
+        <span><Clock3 size={14} /> Status <strong>{station.station_status || station.status || 'unknown'}</strong></span>
       </div>
 
       <div className={`station-recommendation recommendation-${station.status}`}>
@@ -224,6 +233,11 @@ function App() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [lastUpdated, setLastUpdated] = useState(null)
+  const [liveStatus, setLiveStatus] = useState({
+    fetch_status: 'unknown',
+    stale: true,
+    last_successful_fetch: null,
+  })
   const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarState)
 
   const toggleSidebar = useCallback(() => {
@@ -242,13 +256,20 @@ function App() {
 
   const loadStations = useCallback(async () => {
     try {
-      const data = await getStationStatus()
-      if (!Array.isArray(data)) throw new Error('The station API returned an unexpected response.')
-      setStations(data)
-      setError('')
-      setLastUpdated(new Date())
+      const payload = await getLiveStations()
+      const liveStations = Array.isArray(payload?.stations) ? payload.stations : []
+      setStations(liveStations)
+      setError(payload?.fetch_status === 'error' ? 'The latest live feed is currently unavailable.' : '')
+      setLiveStatus({
+        fetch_status: payload?.fetch_status || 'unknown',
+        stale: Boolean(payload?.stale),
+        last_successful_fetch: payload?.last_successful_fetch || null,
+      })
+      setLastUpdated(payload?.last_successful_fetch ? new Date(payload.last_successful_fetch) : new Date())
     } catch (err) {
+      setStations([])
       setError(err.message || 'Could not connect to the backend.')
+      setLiveStatus({ fetch_status: 'error', stale: true, last_successful_fetch: null })
     } finally {
       setLoading(false)
     }
@@ -398,9 +419,9 @@ function App() {
             <div className="breadcrumbs"><span>Operations</span><span className="breadcrumb-slash">/</span> Fleet overview</div>
           </div>
           <div className="topbar-right">
-            <span className={`connection-pill${error ? ' connection-error' : ''}`}>
+            <span className={`connection-pill${error || liveStatus.stale ? ' connection-error' : ''}`}>
               <span className="live-dot" />
-              {error ? 'API attention' : 'Live system'}
+              {error ? 'API attention' : liveStatus.stale ? 'Stale snapshot' : 'Live system'}
             </span>
             <span className="topbar-divider" />
             <div className="operator">
@@ -425,6 +446,7 @@ function App() {
                 {lastUpdated
                   ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                   : loading ? 'Connecting to station network' : 'Waiting for station data'}
+                {liveStatus.stale && !error ? ' · stale snapshot' : ''}
               </span>
               <button
                 className="refresh-button"

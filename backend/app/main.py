@@ -36,3 +36,12 @@ def root():
         "message": "Smart Bicycle Backend API",
         "status": "running"
     }
+
+
+@app.get("/api/health")
+def api_health():
+    return {
+        "status": "ok",
+        "service": "smart-bike-backend",
+        "message": "Backend is running.",
+    }
