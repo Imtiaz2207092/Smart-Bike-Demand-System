@@ -27,3 +27,7 @@ export async function getLiveStations() {
 export async function getModelComparison() {
   return getJson('/models/comparison', 'model comparison')
 }
+
+export async function getRedistributionRecommendations() {
+  return getJson('/api/redistribution', 'redistribution recommendations')
+}

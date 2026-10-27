@@ -20,7 +20,11 @@ import {
   Truck,
   X,
 } from 'lucide-react'
-import { getModelComparison, getLiveStations } from './services/api'
+import { 
+  getModelComparison,
+  getLiveStations,
+  getRedistributionRecommendations
+} from './services/api'
 
 const statusStyles = {
   shortage: 'status-shortage',
@@ -239,6 +243,9 @@ function App() {
     last_successful_fetch: null,
   })
   const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarState)
+  const [redistributionData, setRedistributionData] = useState(null)
+  const [redistributionLoading, setRedistributionLoading] = useState(true)
+  const [redistributionError, setRedistributionError] = useState('')
 
   const toggleSidebar = useCallback(() => {
     setSidebarOpen((open) => {
@@ -288,10 +295,25 @@ function App() {
     }
   }, [])
 
+  const loadRedistribution = useCallback(async () => {
+    try {
+      const data = await getRedistributionRecommendations()
+      setRedistributionData(data)
+      setRedistributionError('')
+    } catch (err) {
+      setRedistributionError(
+        err.message || 'Could not load redistribution recommendations.'
+      )
+    } finally {
+     setRedistributionLoading(false)
+   }
+  }, [])
+
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
       loadStations()
       loadModels()
+      loadRedistribution()
     }, 0)
     const interval = window.setInterval(() => {
       setLoading(true)
@@ -301,7 +323,7 @@ function App() {
       window.clearTimeout(initialLoad)
       window.clearInterval(interval)
     }
-  }, [loadModels, loadStations])
+  }, [loadModels, loadRedistribution, loadStations])
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -339,10 +361,9 @@ function App() {
     })
   }, [filter, search, stations])
 
-  const redistributionPlan = useMemo(
-    () => buildRedistributionPlan(stations),
-    [stations],
-  )
+  const redistributionPlan = redistributionData?.recommendations ?? []
+  const totalBikesToTransfer = redistributionData?.total_bikes_to_transfer ?? 0
+
   const bestModel = models.reduce((best, model) => (
     !best || Number(model.RMSE) < Number(best.RMSE) ? model : best
   ), null)
@@ -435,7 +456,7 @@ function App() {
           <section id="overview" className="welcome-row">
             <div>
               <p className="eyebrow">CITY MOBILITY · OPERATIONS CENTER</p>
-              <h1>Your fleet, <span>in motion.</span></h1>
+              <h1>Your Fleet, <span>in Motion.</span></h1>
               <p className="welcome-description">
                 A real-time view of station health, bike availability and where your team can make a difference.
               </p>
@@ -650,33 +671,69 @@ function App() {
           <section id="redistribution" className="redistribution-section">
             <SectionHeading
               eyebrow="FIELD OPERATIONS"
-              title="Redistribution desk"
+              title="Redistribution Desk"
               detail="Threshold-based transfer suggestions using the current station snapshot."
             />
             <div className="redistribution-layout">
               <article className="panel flow-panel">
                 <div className="flow-panel-heading">
                   <div>
-                    <h3>Suggested bike movements</h3>
-                    <p>Surplus stations → stations needing support</p>
+                    <h3>Suggested Bike Movements</h3>
+                      <p>CycleFlow Recommendations · Donor to Recipient</p>
                   </div>
-                  <span className="suggestion-count">{redistributionPlan.length} {redistributionPlan.length === 1 ? 'suggestion' : 'suggestions'}</span>
+                  <span className="suggestion-count">
+                    {redistributionPlan.length}{' '}
+                    {redistributionPlan.length === 1 ? 'suggestion' : 'suggestions'}
+                  </span>
                 </div>
-                {redistributionPlan.length > 0 ? (
+                {redistributionLoading ? (
+                  <div className="no-flows">
+                    <div>
+                      <strong>Loading redistribution recommendations…</strong>
+                    </div>
+                  </div>
+                ) : redistributionError ? (
+                <div className="no-flows" role="alert">
+                  <div>
+                    <strong>Recommendations unavailable</strong>
+                      <p>{redistributionError}</p>
+                      <button onClick={loadRedistribution}>Retry</button>
+                  </div>
+                </div>
+                ) : redistributionPlan.length > 0 ? (
                   <div className="flow-list">
                     {redistributionPlan.map((flow, index) => (
-                      <div className="flow-row" key={`${flow.from.station_id}-${flow.to.station_id}-${index}`}>
+                      <div
+                        className="flow-row"
+                        key={`${flow.from_station_id}-${flow.to_station_id}-${index}`}
+                      >
                         <div className="flow-station flow-donor">
-                          <span className="flow-station-icon"><Bike size={15} /></span>
-                          <span><strong>{flow.from.station_name}</strong><small>Surplus · {flow.from.available_bikes} bikes now</small></span>
+                          <span className="flow-station-icon">
+                            <Bike size={15} />
+                          </span>
+                          <span>
+                            <strong>{flow.from_station_name}</strong>
+                            <small>Donor station · {flow.from_station_id}</small>
+                          </span>
                         </div>
                         <div className="flow-middle">
-                          <span>{flow.bikes} {flow.bikes === 1 ? 'bike' : 'bikes'}</span>
-                          <span className="flow-arrow"><ArrowRight size={17} /></span>
+                          <span>
+                            {flow.bikes_to_transfer}{' '}
+                            {flow.bikes_to_transfer === 1 ? 'bike' : 'bikes'}
+                          </span>
+                          <span className="flow-arrow">
+                            <ArrowRight size={17} />
+                          </span>
+                          <small>{Number(flow.distance_km).toFixed(2)} km</small>
                         </div>
                         <div className="flow-station flow-recipient">
-                          <span className="flow-station-icon"><MapPin size={15} /></span>
-                          <span><strong>{flow.to.station_name}</strong><small>Shortage · {flow.to.available_bikes} bikes now</small></span>
+                          <span className="flow-station-icon">
+                            <MapPin size={15} />
+                          </span>
+                          <span>
+                            <strong>{flow.to_station_name}</strong>
+                            <small>Recipient station · {flow.to_station_id}</small>
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -684,24 +741,26 @@ function App() {
                 ) : (
                   <div className="no-flows">
                     <span><Check size={18} /></span>
-                    <div><strong>{stations.length === 0 ? 'Station data is needed first' : 'No threshold-based transfer pairs'}</strong>
-                      <p>{stations.length === 0
-                        ? 'Connect to the station API to generate an operational plan.'
-                        : shortageCount === 0 && surplusCount === 0
-                          ? 'No reported shortages or surpluses. The network is within its operating thresholds.'
-                          : 'Shortages or surpluses exist, but there is no opposite-status station to pair with.'}</p>
+                    <div>
+                      <strong>No transfer recommendations available</strong>
+                      <p>
+                        {redistributionData?.message ||
+                        'No eligible donor and recipient stations were found.'}
+                      </p>
                     </div>
                   </div>
                 )}
                 <p className="flow-disclaimer">
-                  Planning aid only: quantities move stations just across the API’s 20% / 80% status thresholds. No ML forecast, route optimization or transfer execution is implied.
+                  Recommendations are generated by the backend redistribution algorithm.
+                  Distances are estimates between station coordinates. No bikes are
+                  physically moved by this API.
                 </p>
               </article>
 
               <aside className="dispatch-card">
                 <div className="dispatch-mark"><Truck size={20} /></div>
                 <p className="eyebrow">DISPATCH SNAPSHOT</p>
-                <strong>{redistributionPlan.reduce((sum, flow) => sum + flow.bikes, 0)}</strong>
+                <strong>{totalBikesToTransfer}</strong>
                 <span>bikes in suggested transfers</span>
                 <div className="dispatch-rule" />
                 <div className="dispatch-rows">
