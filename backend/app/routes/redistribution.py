@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, HTTPException
 
 from app.services.gbfs_service import gbfs_service
