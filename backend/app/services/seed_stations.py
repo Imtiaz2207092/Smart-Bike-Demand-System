@@ -1,4 +1,3 @@
-
 from app.database import SessionLocal
 from app.models.stations import Station
 
@@ -106,7 +105,6 @@ def seed_stations():
                 db.add(Station(**station_data))
                 inserted += 1
             else:
-                # Update existing station details, including its name
                 for key, value in station_data.items():
                     setattr(existing, key, value)
                 updated += 1
