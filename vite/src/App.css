@@ -153,6 +153,7 @@ button {
   color: #c9f399;
   border-color: rgba(185, 239, 138, .12);
   background: rgba(185, 239, 138, .1);
+  font-weight: 760;
 }
 
 .sidebar-bottom {
@@ -920,11 +921,19 @@ button {
   text-align: center;
 }
 
+.welcome-row,
+.forecast-section,
 .stations-section,
 .redistribution-section,
 .model-section {
   scroll-margin-top: 85px;
-  margin-top: 29px;
+}
+
+.forecast-section,
+.stations-section,
+.redistribution-section,
+.model-section {
+  margin-top: 40px;
 }
 
 .station-controls {
@@ -1237,13 +1246,19 @@ button {
 }
 
 .redistribution-section > .section-heading,
+.forecast-section > .section-heading,
 .model-section > .section-heading {
   margin-bottom: 14px;
+}
+
+.forecast-section > .analytics-grid {
+  margin-top: 0;
 }
 
 .redistribution-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 245px;
+  align-items: start;
   gap: 13px;
 }
 
@@ -1258,6 +1273,16 @@ button {
   gap: 12px;
   padding-bottom: 14px;
   border-bottom: 1px solid #edf1ed;
+}
+
+.flow-panel-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.redistribution-search {
+  min-width: 205px;
 }
 
 .flow-panel-heading h3 {
@@ -1407,8 +1432,13 @@ button {
 }
 
 .dispatch-card {
-  position: relative;
-  overflow: hidden;
+  position: sticky;
+  top: 85px;
+  align-self: start;
+  max-height: calc(100vh - 105px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 17px;
   color: #ecf4ee;
   border: 1px solid #1d4634;
@@ -1676,7 +1706,7 @@ button {
   }
 
   .backdrop-visible {
-    pointer-events: auto;
+    pointer-events: none;
     opacity: 1;
   }
 
@@ -1762,8 +1792,11 @@ button {
     gap: 12px;
   }
 
-  .stations-section {
-    margin-top: 24px;
+  .forecast-section,
+  .stations-section,
+  .redistribution-section,
+  .model-section {
+    margin-top: 30px;
   }
 
   .station-controls {
@@ -1802,7 +1835,24 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .flow-panel-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .flow-panel-controls {
+    justify-content: space-between;
+  }
+
+  .redistribution-search {
+    min-width: 0;
+    flex: 1;
+  }
+
   .dispatch-card {
+    position: static;
+    max-height: none;
+    overflow: visible;
     display: grid;
     grid-template-columns: 40px 1fr auto;
     align-items: center;

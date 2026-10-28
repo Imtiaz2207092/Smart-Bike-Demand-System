@@ -43,7 +43,6 @@ const statusLabels = {
 const SIDEBAR_KEY = 'cycleflow.sidebarOpen'
 
 function getInitialSidebarState() {
-  if (typeof window !== 'undefined' && window.innerWidth < 1024) return false
   try {
     const saved = localStorage.getItem(SIDEBAR_KEY)
     return saved === null ? true : saved === 'true'
@@ -62,34 +61,6 @@ function getTransferSurplus(station) {
   if (station.status !== 'surplus' || station.available_bikes === null) return 0
   const bikesToKeep = Math.ceil(station.capacity * 0.8) - 1
   return Math.max(0, station.available_bikes - bikesToKeep)
-}
-
-function buildRedistributionPlan(stations) {
-  const recipients = stations
-    .filter((station) => station.status === 'shortage')
-    .map((station) => ({ station, remaining: getTransferNeed(station) }))
-    .sort((a, b) => b.remaining - a.remaining)
-  const donors = stations
-    .filter((station) => station.status === 'surplus')
-    .map((station) => ({ station, remaining: getTransferSurplus(station) }))
-    .sort((a, b) => b.remaining - a.remaining)
-  const plan = []
-
-  recipients.forEach((recipient) => {
-    donors.forEach((donor) => {
-      if (recipient.remaining <= 0 || donor.remaining <= 0) return
-      const bikes = Math.min(recipient.remaining, donor.remaining)
-      plan.push({
-        from: donor.station,
-        to: recipient.station,
-        bikes,
-      })
-      recipient.remaining -= bikes
-      donor.remaining -= bikes
-    })
-  })
-
-  return plan
 }
 
 function StatCard({ title, value, detail, icon: Icon, tone }) {
@@ -219,6 +190,7 @@ function NavLink({ href, icon: Icon, children, active, onClick }) {
     <a
       href={href}
       className={`nav-link${active ? ' nav-link-active' : ''}`}
+      aria-current={active ? 'location' : undefined}
       onClick={onClick}
     >
       <Icon size={18} strokeWidth={1.8} />
@@ -243,17 +215,41 @@ function App() {
     last_successful_fetch: null,
   })
   const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarState)
+  const [activeSection, setActiveSection] = useState('overview')
   const [redistributionData, setRedistributionData] = useState(null)
   const [redistributionLoading, setRedistributionLoading] = useState(true)
   const [redistributionError, setRedistributionError] = useState('')
+  const [redistributionSearch, setRedistributionSearch] = useState('')
+
+  useEffect(() => {
+    const sectionIds = ['overview', 'forecast', 'stations', 'redistribution', 'model-comparison']
+    const updateActiveSection = () => {
+      const scrollPosition = window.scrollY + 120
+      let currentSection = sectionIds[0]
+
+      for (const sectionId of sectionIds) {
+        const section = document.getElementById(sectionId)
+        const sectionTop = section
+          ? section.getBoundingClientRect().top + window.scrollY
+          : Number.POSITIVE_INFINITY
+        if (sectionTop <= scrollPosition) {
+          currentSection = sectionId
+        }
+      }
+
+      setActiveSection(currentSection)
+    }
+
+    window.addEventListener('scroll', updateActiveSection, { passive: true })
+    updateActiveSection()
+    return () => window.removeEventListener('scroll', updateActiveSection)
+  }, [])
 
   const toggleSidebar = useCallback(() => {
     setSidebarOpen((open) => {
       const next = !open
       try {
-        if (window.innerWidth >= 1024) {
-          localStorage.setItem(SIDEBAR_KEY, String(next))
-        }
+        localStorage.setItem(SIDEBAR_KEY, String(next))
       } catch {
         // Storage may be unavailable in private browsing.
       }
@@ -325,14 +321,6 @@ function App() {
     }
   }, [loadModels, loadRedistribution, loadStations])
 
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape' && window.innerWidth < 1024) setSidebarOpen(false)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
-
   const knownStations = useMemo(
     () => stations.filter((station) => station.available_bikes !== null),
     [stations],
@@ -361,7 +349,18 @@ function App() {
     })
   }, [filter, search, stations])
 
-  const redistributionPlan = redistributionData?.recommendations ?? []
+  const redistributionPlan = useMemo(
+    () => redistributionData?.recommendations ?? [],
+    [redistributionData],
+  )
+  const filteredRedistributionPlan = useMemo(() => {
+    const query = redistributionSearch.trim().toLowerCase()
+    if (!query) return redistributionPlan
+    return redistributionPlan.filter((flow) => (
+      String(flow.to_station_name ?? '').toLowerCase().includes(query)
+      || String(flow.to_station_id ?? '').toLowerCase().includes(query)
+    ))
+  }, [redistributionPlan, redistributionSearch])
   const totalBikesToTransfer = redistributionData?.total_bikes_to_transfer ?? 0
 
   const bestModel = models.reduce((best, model) => (
@@ -374,14 +373,17 @@ function App() {
   return (
     <div className="app-shell">
       <div
-        onClick={() => setSidebarOpen(false)}
         aria-hidden="true"
         className={`sidebar-backdrop${sidebarOpen ? ' backdrop-visible' : ''}`}
       />
 
       <aside className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`} aria-label="Main navigation">
         <div className="brand">
-          <a className="brand-main" href="#overview" onClick={() => setSidebarOpen(false)}>
+          <a
+            className="brand-main"
+            href="#overview"
+            onClick={() => setActiveSection('overview')}
+          >
             <span className="brand-mark"><Bike size={23} strokeWidth={2.1} /></span>
             <span className="brand-copy">
               <strong>cycleflow<span>.</span></strong>
@@ -390,8 +392,8 @@ function App() {
           </a>
           <button
             className="sidebar-close"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Close navigation"
+            onClick={toggleSidebar}
+            aria-label="Toggle navigation"
           >
             <X size={18} />
           </button>
@@ -399,17 +401,45 @@ function App() {
 
         <div className="workspace-label">CONTROL CENTER</div>
         <nav className="primary-nav">
-          <NavLink href="#overview" icon={LayoutDashboard} active onClick={() => setSidebarOpen(false)}>
+          <NavLink
+            href="#overview"
+            icon={LayoutDashboard}
+            active={activeSection === 'overview'}
+            onClick={() => setActiveSection('overview')}
+          >
             Overview
           </NavLink>
-          <NavLink href="#stations" icon={MapPin} onClick={() => setSidebarOpen(false)}>
-            Station network
-          </NavLink>
-          <NavLink href="#forecast" icon={Activity} onClick={() => setSidebarOpen(false)}>
+          <NavLink
+            href="#forecast"
+            icon={Activity}
+            active={activeSection === 'forecast'}
+            onClick={() => setActiveSection('forecast')}
+          >
             Forecast &amp; models
           </NavLink>
-          <NavLink href="#redistribution" icon={Truck} onClick={() => setSidebarOpen(false)}>
+          <NavLink
+            href="#stations"
+            icon={MapPin}
+            active={activeSection === 'stations'}
+            onClick={() => setActiveSection('stations')}
+          >
+            Station network
+          </NavLink>
+          <NavLink
+            href="#redistribution"
+            icon={Truck}
+            active={activeSection === 'redistribution'}
+            onClick={() => setActiveSection('redistribution')}
+          >
             Redistribution
+          </NavLink>
+          <NavLink
+            href="#model-comparison"
+            icon={Sparkles}
+            active={activeSection === 'model-comparison'}
+            onClick={() => setActiveSection('model-comparison')}
+          >
+            Model comparison
           </NavLink>
         </nav>
 
@@ -549,11 +579,17 @@ function App() {
             <span className="snapshot-note"><span className="live-dot" /> Snapshot-based monitoring · auto-refreshes every 60 seconds</span>
           </section>
 
-          <section className="analytics-grid" aria-label="Network analytics">
+          <section id="forecast" className="forecast-section">
+            <SectionHeading
+              eyebrow="DEMAND PLANNING"
+              title="Forecast & Model Insights"
+              detail="Review network capacity trends and compare the demand models behind future planning."
+            />
+            <div className="analytics-grid" aria-label="Network analytics">
             <article className="panel pulse-panel">
               <SectionHeading
                 eyebrow="LIVE NETWORK"
-                title="Capacity pulse"
+                title="Capacity Pulse"
                 detail="Station occupancy from the latest available snapshot."
                 action={<span className="panel-count">{knownStations.length} reporting</span>}
               />
@@ -583,7 +619,7 @@ function App() {
               </div>
             </article>
 
-            <article className="panel intelligence-panel" id="forecast">
+            <article className="panel intelligence-panel">
               <div className="intelligence-top">
                 <span className="intelligence-icon"><Sparkles size={18} /></span>
                 <span className="intelligence-label">FORECAST INTELLIGENCE</span>
@@ -616,12 +652,13 @@ function App() {
                 Metrics are from the saved ML evaluation report. Live demand predictions are not currently exposed by the API.
               </p>
             </article>
+            </div>
           </section>
 
           <section id="stations" className="stations-section">
             <SectionHeading
               eyebrow="THE CITY NETWORK"
-              title="Station overview"
+              title="Station Overview"
               detail="Every station, its live capacity and the next operational step."
               action={
                 <div className="station-controls">
@@ -679,12 +716,24 @@ function App() {
                 <div className="flow-panel-heading">
                   <div>
                     <h3>Suggested Bike Movements</h3>
-                      <p>CycleFlow Recommendations · Donor to Recipient</p>
+                    <p>CycleFlow Recommendations · Donor to Recipient</p>
                   </div>
-                  <span className="suggestion-count">
-                    {redistributionPlan.length}{' '}
-                    {redistributionPlan.length === 1 ? 'suggestion' : 'suggestions'}
-                  </span>
+                  <div className="flow-panel-controls">
+                    <label className="search-control redistribution-search">
+                      <Search size={15} aria-hidden="true" />
+                      <input
+                        type="search"
+                        value={redistributionSearch}
+                        onChange={(event) => setRedistributionSearch(event.target.value)}
+                        placeholder="Search shortage station"
+                        aria-label="Search recommendations by shortage station"
+                      />
+                    </label>
+                    <span className="suggestion-count">
+                      {filteredRedistributionPlan.length}{' '}
+                      {filteredRedistributionPlan.length === 1 ? 'suggestion' : 'suggestions'}
+                    </span>
+                  </div>
                 </div>
                 {redistributionLoading ? (
                   <div className="no-flows">
@@ -700,9 +749,9 @@ function App() {
                       <button onClick={loadRedistribution}>Retry</button>
                   </div>
                 </div>
-                ) : redistributionPlan.length > 0 ? (
+                ) : filteredRedistributionPlan.length > 0 ? (
                   <div className="flow-list">
-                    {redistributionPlan.map((flow, index) => (
+                    {filteredRedistributionPlan.map((flow, index) => (
                       <div
                         className="flow-row"
                         key={`${flow.from_station_id}-${flow.to_station_id}-${index}`}
@@ -738,6 +787,14 @@ function App() {
                       </div>
                     ))}
                   </div>
+                ) : redistributionPlan.length > 0 ? (
+                  <div className="no-flows">
+                    <span><Search size={17} /></span>
+                    <div>
+                      <strong>No matching shortage station</strong>
+                      <p>Try a different station name or ID.</p>
+                    </div>
+                  </div>
                 ) : (
                   <div className="no-flows">
                     <span><Check size={18} /></span>
@@ -772,10 +829,10 @@ function App() {
             </div>
           </section>
 
-          <section className="model-section" aria-labelledby="model-comparison-title">
+          <section id="model-comparison" className="model-section" aria-labelledby="model-comparison-title">
             <SectionHeading
               eyebrow="PREDICTIVE PERFORMANCE"
-              title="Model comparison"
+              title="Model Comparison"
               detail="Evaluation metrics loaded from the ML engine’s saved comparison report."
               action={<span className="report-chip"><Activity size={14} /> ML ENGINE REPORT</span>}
             />
