@@ -23,7 +23,8 @@ import {
 import { 
   getModelComparison,
   getLiveStations,
-  getRedistributionRecommendations
+  getRedistributionRecommendations,
+  getForecastRedistribution
 } from './services/api'
 
 const statusStyles = {
@@ -220,6 +221,21 @@ function App() {
   const [redistributionLoading, setRedistributionLoading] = useState(true)
   const [redistributionError, setRedistributionError] = useState('')
   const [redistributionSearch, setRedistributionSearch] = useState('')
+  const [forecastInput, setForecastInput] = useState({
+    datetime: '2026-10-30T08:00:00',
+    season: 4,
+    holiday: 0,
+    workingday: 1,
+    weather: 1,
+    temp: 0.5,
+    atemp: 0.5,
+    humidity: 60,
+    windspeed: 10,
+  })
+
+  const [forecastRedistribution, setForecastRedistribution] = useState(null)
+  const [forecastRedistributionLoading, setForecastRedistributionLoading] = useState(false)
+  const [forecastRedistributionError, setForecastRedistributionError] = useState('')
 
   useEffect(() => {
     const sectionIds = ['overview', 'forecast', 'stations', 'redistribution', 'model-comparison']
@@ -304,6 +320,37 @@ function App() {
      setRedistributionLoading(false)
    }
   }, [])
+
+  const handleForecastRedistribution = async (event) => {
+  event.preventDefault()
+
+  setForecastRedistributionLoading(true)
+  setForecastRedistributionError('')
+
+  try {
+    const payload = {
+      ...forecastInput,
+      season: Number(forecastInput.season),
+      holiday: Number(forecastInput.holiday),
+      workingday: Number(forecastInput.workingday),
+      weather: Number(forecastInput.weather),
+      temp: Number(forecastInput.temp),
+      atemp: Number(forecastInput.atemp),
+      humidity: Number(forecastInput.humidity),
+      windspeed: Number(forecastInput.windspeed),
+    }
+
+    const result = await getForecastRedistribution(payload)
+    setForecastRedistribution(result)
+  } catch (err) {
+    setForecastRedistributionError(
+      err.message || 'Could not generate forecast-informed recommendations.'
+    )
+    setForecastRedistribution(null)
+  } finally {
+    setForecastRedistributionLoading(false)
+  }
+}
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
@@ -711,6 +758,219 @@ function App() {
               title="Redistribution Desk"
               detail="Threshold-based transfer suggestions using the current station snapshot."
             />
+            <article className="panel forecast-redistribution-panel">
+              <SectionHeading
+                eyebrow="PREDICTIVE OPERATIONS"
+                title="Forecast-Informed Redistribution"
+                detail="Plan station transfers around expected demand and current inventory."
+                action={<span className="forecast-panel-badge"><Sparkles size={13} /> Planning tool</span>}
+              />
+
+              <form className="forecast-form" onSubmit={handleForecastRedistribution}>
+                <div className="forecast-input-groups">
+                  <section className="forecast-input-group forecast-time-group">
+                    <div className="forecast-group-heading">
+                      <h3>Plan the forecast window</h3>
+                      <p>Choose when you want to prepare station inventory.</p>
+                    </div>
+                    <div className="forecast-fields forecast-time-fields">
+                      <label className="forecast-field">
+                        <span>Forecast date and time</span>
+                        <input
+                          type="datetime-local"
+                          value={forecastInput.datetime}
+                          onChange={(event) =>
+                            setForecastInput((previous) => ({
+                              ...previous,
+                              datetime: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="forecast-input-group">
+                    <div className="forecast-group-heading">
+                      <h3>Demand conditions</h3>
+                      <p>Adjust the conditions used by the demand model.</p>
+                    </div>
+                    <div className="forecast-fields">
+                      {[
+                        ['season', 'Season', [
+                          ['1', 'Spring'],
+                          ['2', 'Summer'],
+                          ['3', 'Fall'],
+                          ['4', 'Winter'],
+                        ]],
+                        ['holiday', 'Holiday', [
+                          ['0', 'No'],
+                          ['1', 'Yes'],
+                        ]],
+                        ['workingday', 'Working day', [
+                          ['0', 'No'],
+                          ['1', 'Yes'],
+                        ]],
+                        ['weather', 'Weather', [
+                          ['1', 'Clear or partly cloudy'],
+                          ['2', 'Mist or cloudy'],
+                          ['3', 'Light rain or snow'],
+                          ['4', 'Heavy rain or snow'],
+                        ]],
+                      ].map(([name, label, options]) => (
+                        <label className="forecast-field" key={name}>
+                          <span>{label}</span>
+                          <select
+                            value={forecastInput[name]}
+                            onChange={(event) =>
+                              setForecastInput((previous) => ({
+                                ...previous,
+                                [name]: event.target.value,
+                              }))
+                            }
+                            required
+                          >
+                            {options.map(([value, optionLabel]) => (
+                              <option value={value} key={value}>{optionLabel}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                      {[
+                        ['temp', 'Temperature', 0, 1, 0.01, 'Normalized, 0 to 1'],
+                        ['atemp', 'Feels-like temperature', 0, 1, 0.01, 'Normalized, 0 to 1'],
+                        ['humidity', 'Humidity', 0, 100, 1, '0 to 100'],
+                        ['windspeed', 'Wind speed', 0, 100, 0.1, '0 to 100'],
+                      ].map(([name, label, min, max, step, hint]) => (
+                        <label className="forecast-field" key={name}>
+                          <span>{label}</span>
+                          <input
+                            type="number"
+                            min={min}
+                            max={max}
+                            step={step}
+                            value={forecastInput[name]}
+                            onChange={(event) =>
+                              setForecastInput((previous) => ({
+                                ...previous,
+                                [name]: event.target.value,
+                              }))
+                            }
+                            aria-describedby={`forecast-hint-${name}`}
+                            required
+                          />
+                          <small id={`forecast-hint-${name}`}>{hint}</small>
+                        </label>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+
+                <div className="forecast-form-footer">
+                  <p>Recommendations use the system-wide forecast and current station inventory.</p>
+                  <button
+                    type="submit"
+                    className="refresh-button"
+                    disabled={forecastRedistributionLoading}
+                  >
+                    {forecastRedistributionLoading
+                      ? 'Generating recommendations…'
+                      : 'Generate forecast-informed plan'}
+                    {!forecastRedistributionLoading && <ArrowRight size={15} />}
+                  </button>
+                </div>
+              </form>
+
+              {forecastRedistributionError && (
+                <div className="error-banner forecast-error" role="alert">
+                  {forecastRedistributionError}
+                </div>
+              )}
+
+              {forecastRedistribution && (
+                <div className="forecast-result">
+                  <div className="forecast-result-heading">
+                    <div>
+                      <p className="eyebrow">PLAN SUMMARY</p>
+                      <h3>Forecast results</h3>
+                    </div>
+                    <span className="forecast-scope">
+                      {forecastRedistribution.forecast_scope || 'Not specified'}
+                    </span>
+                  </div>
+
+                  <div className="forecast-metrics">
+                    <div className="forecast-metric">
+                      <span>Predicted demand</span>
+                      <strong>{forecastRedistribution.forecast?.predicted_demand ?? '—'}</strong>
+                      <small>System-wide forecast</small>
+                    </div>
+                    <div className="forecast-metric">
+                      <span>Peak hour</span>
+                      <strong>{forecastRedistribution.forecast?.is_peak_hour === 1 ? 'Yes' : 'No'}</strong>
+                      <small>Expected demand period</small>
+                    </div>
+                    <div className="forecast-metric">
+                      <span>Target bike level</span>
+                      <strong>{forecastRedistribution.target_bike_percentage ?? '—'}%</strong>
+                      <small>Recommended station target</small>
+                    </div>
+                    <div className="forecast-metric forecast-metric-highlight">
+                      <span>Bikes to transfer</span>
+                      <strong>{forecastRedistribution.total_bikes_to_transfer ?? 0}</strong>
+                      <small>Across all suggested routes</small>
+                    </div>
+                  </div>
+
+                  <div className="forecast-transfers-heading">
+                    <div>
+                      <h3>Recommended transfers</h3>
+                      <p>Suggested donor-to-recipient movements</p>
+                    </div>
+                    <span>{forecastRedistribution.recommendations?.length ?? 0} routes</span>
+                  </div>
+
+                  {forecastRedistribution.recommendations?.length > 0 ? (
+                    <div className="forecast-transfer-list">
+                      {forecastRedistribution.recommendations.map((flow, index) => (
+                        <div
+                          className="forecast-transfer-row"
+                          key={`${flow.from_station_id}-${flow.to_station_id}-${index}`}
+                        >
+                          <div className="forecast-transfer-station forecast-transfer-donor">
+                            <span className="forecast-station-role">DONOR</span>
+                            <strong>{flow.from_station_name}</strong>
+                            <small>{flow.from_station_id}</small>
+                          </div>
+                          <div className="forecast-transfer-middle">
+                            <strong>{flow.bikes_to_transfer} bikes</strong>
+                            <span><ArrowRight size={15} /></span>
+                            <small>{Number(flow.distance_km).toFixed(2)} km</small>
+                          </div>
+                          <div className="forecast-transfer-station forecast-transfer-recipient">
+                            <span className="forecast-station-role">RECIPIENT</span>
+                            <strong>{flow.to_station_name}</strong>
+                            <small>{flow.to_station_id}</small>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="forecast-no-transfers">
+                      <strong>No transfers needed for this forecast</strong>
+                      <p>No eligible donor-to-recipient routes were found.</p>
+                    </div>
+                  )}
+
+                  <p className="forecast-disclaimer">
+                    Planning suggestions are based on a system-wide demand forecast, not station-specific predictions.
+                    They do not physically move bikes.
+                  </p>
+                </div>
+              )}
+            </article>
+
             <div className="redistribution-layout">
               <article className="panel flow-panel">
                 <div className="flow-panel-heading">

@@ -31,3 +31,31 @@ export async function getModelComparison() {
 export async function getRedistributionRecommendations() {
   return getJson('/api/redistribution', 'redistribution recommendations')
 }
+
+export async function getForecastRedistribution(payload) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/redistribution/forecast`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    }
+  )
+
+  if (!response.ok) {
+    let message = `Failed to load forecast redistribution (HTTP ${response.status})`
+
+    try {
+      const errorData = await response.json()
+      if (errorData.detail) message = errorData.detail
+    } catch {
+      // Keep the default error message.
+    }
+
+    throw new Error(message)
+  }
+
+  return response.json()
+}
