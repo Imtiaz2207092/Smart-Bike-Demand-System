@@ -1,0 +1,45 @@
+.\venv\Scripts\activate
+python -m uvicorn app.main:app --reload
+
+cycleflow_user password: Y@$Ar&1m7IA^
+
+{
+  "station_id": "ST-103",
+  "available_bikes": 37,
+  "available_docks": 23
+}
+{
+  "station_id": "ST-104",
+  "available_bikes": 33,
+  "available_docks": 12
+}
+{
+  "station_id": "ST-105",
+  "available_bikes": 30,
+  "available_docks": 6
+}
+{
+  "station_id": "ST-106",
+  "available_bikes": 8,
+  "available_docks": 22
+}
+{
+  "station_id": "ST-107",
+  "available_bikes": 11,
+  "available_docks": 39
+}
+{
+  "station_id": "ST-108",
+  "available_bikes": 29,
+  "available_docks": 6
+}
+{
+  "station_id": "ST-109",
+  "available_bikes": 0,
+  "available_docks": 30
+}
+{
+  "station_id": "ST-110",
+  "available_bikes": 33,
+  "available_docks": 7
+}
