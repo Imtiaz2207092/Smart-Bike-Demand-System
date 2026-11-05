@@ -14,10 +14,10 @@ class ForecastRequest(BaseModel):
     holiday: int = Field(ge=0, le=1)
     workingday: int = Field(ge=0, le=1)
     weather: int = Field(ge=1, le=4)
-    temp: float
-    atemp: float
+    temp: float = Field(ge=0, le=56)
+    atemp: float = Field(ge=0, le=60)
     humidity: float = Field(ge=0, le=100)
-    windspeed: float = Field(ge=0)
+    windspeed: float = Field(ge=0, le=60)
 
 
 @router.post("")

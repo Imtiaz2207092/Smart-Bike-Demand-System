@@ -18,3 +18,16 @@ A secure smart bike sharing demand forecasting and redistribution system.
 - Distance-aware Redistribution
 - Model Monitoring
 - Secure Dashboard
+
+To run this project backend:
+D:
+cd Smart-Bike-Demand-System\backend
+.\venv\Scripts\activate
+python -m uvicorn app.main:app --reload
+
+To run this project frontend:
+D:
+cd Smart-Bike-Demand-System\vite
+npm run dev
+
+cycleflow_user password: Y@$Ar&1m7IA^

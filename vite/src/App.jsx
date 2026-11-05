@@ -227,8 +227,8 @@ function App() {
     holiday: 0,
     workingday: 1,
     weather: 1,
-    temp: 0.5,
-    atemp: 0.5,
+    temp: 20.5,
+    atemp: 24.24,
     humidity: 60,
     windspeed: 10,
   })
@@ -838,10 +838,10 @@ function App() {
                         </label>
                       ))}
                       {[
-                        ['temp', 'Temperature', 0, 1, 0.01, 'Normalized, 0 to 1'],
-                        ['atemp', 'Feels-like temperature', 0, 1, 0.01, 'Normalized, 0 to 1'],
+                        ['temp', 'Temperature (°C)', 0, 57, 0.1, 'Raw training-data value, 0 to 57 °C'],
+                        ['atemp', 'Feels-like temperature (°C)', 0, 63, 0.1, 'Raw training-data value, 0 to 63 °C'],
                         ['humidity', 'Humidity', 0, 100, 1, '0 to 100'],
-                        ['windspeed', 'Wind speed', 0, 100, 0.1, '0 to 100'],
+                        ['windspeed', 'Wind speed', 0, 60, 0.1, 'Raw training-data value, 0 to 60'],
                       ].map(([name, label, min, max, step, hint]) => (
                         <label className="forecast-field" key={name}>
                           <span>{label}</span>

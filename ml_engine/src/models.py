@@ -7,6 +7,7 @@ import os
 import joblib
 import pandas as pd
 import numpy as np
+import tensorflow as tf
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
@@ -17,6 +18,7 @@ class BikeDemandModelTrainer:
     1. Linear Regression (Baseline)
     2. Random Forest Regressor (Ensemble)
     3. XGBoost Regressor (State-of-the-Art Gradient Boosting)
+    4. Deep Neural Network (DNN)
     """
     
     def __init__(self, models_dir: str = "ml_engine/models_saved"):
@@ -56,16 +58,78 @@ class BikeDemandModelTrainer:
         self.trained_models['XGBoost'] = model
         return model
 
+    def train_dnn(self, X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame = None, y_val: pd.Series = None, epochs: int = 100, batch_size: int = 32):
+        """Trains a Deep Neural Network for bike demand regression."""
+
+        # Convert data to NumPy arrays
+        X_train_array = X_train.to_numpy(dtype=np.float32)
+        y_train_array = y_train.to_numpy(dtype=np.float32)
+
+        # Normalize input features using training data only
+        normalizer = tf.keras.layers.Normalization(axis=-1)
+        normalizer.adapt(X_train_array)
+
+        # Build the Deep Neural Network
+        model = tf.keras.Sequential([
+            tf.keras.Input(shape=(X_train_array.shape[1],)),
+            normalizer,
+            tf.keras.layers.Dense(128, activation="relu"),
+            tf.keras.layers.Dense(64, activation="relu"),
+            tf.keras.layers.Dense(32, activation="relu"),
+            tf.keras.layers.Dense(1, activation="linear")
+        ])
+
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+            loss="mse",
+            metrics=["mae"]
+        )
+
+        callbacks = [
+            tf.keras.callbacks.EarlyStopping(
+                monitor="val_loss" if X_val is not None else "loss",
+                patience=12,
+                restore_best_weights=True
+            )
+        ]
+
+        fit_kwargs = {
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "callbacks": callbacks,
+            "verbose": 1
+        }
+
+        if X_val is not None and y_val is not None:
+            fit_kwargs["validation_data"] = (
+                X_val.to_numpy(dtype=np.float32),
+                y_val.to_numpy(dtype=np.float32)
+            )
+
+        model.fit(X_train_array, y_train_array, **fit_kwargs)
+
+        self.trained_models["DNN"] = model
+        return model
+
     def save_model(self, model_name: str, filename: str = None) -> str:
-        """Saves trained model to disk using joblib."""
+        """Saves trained models using the appropriate format."""
+
         if model_name not in self.trained_models:
             raise ValueError(f"Model {model_name} has not been trained yet.")
-        
+
+        model = self.trained_models[model_name]
+
         if filename is None:
-            filename = f"{model_name.lower().replace(' ', '_')}.joblib"
-            
+            extension = ".keras" if model_name == "DNN" else ".joblib"
+            filename = f"{model_name.lower().replace(' ', '_')}{extension}"
+
         filepath = os.path.join(self.models_dir, filename)
-        joblib.dump(self.trained_models[model_name], filepath)
+
+        if model_name == "DNN":
+            model.save(filepath)
+        else:
+            joblib.dump(model, filepath)
+
         return filepath
 
     @staticmethod
@@ -73,4 +137,6 @@ class BikeDemandModelTrainer:
         """Loads model from disk."""
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Saved model file not found at {filepath}")
+        if filepath.endswith(".keras"):
+            return tf.keras.models.load_model(filepath)
         return joblib.load(filepath)

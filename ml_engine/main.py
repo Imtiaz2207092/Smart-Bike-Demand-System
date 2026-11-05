@@ -18,6 +18,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from ml_engine.src.data_cleaning import load_and_clean_data
 from ml_engine.src.feature_engineering import extract_features, get_feature_columns
+from ml_engine.src.evaluation import evaluate_and_compare_models
 from ml_engine.src.models import BikeDemandModelTrainer
 from ml_engine.src.redistribution import detect_shortage_surplus, recommend_redistribution
 
@@ -62,10 +63,18 @@ def run_ml_pipeline():
     print("  - Training Gradient Boosting (XGBoost Regressor)...")
     trainer.train_xgboost(X_train, y_train, n_estimators=150, learning_rate=0.08, max_depth=6)
 
+    print("  - Training Deep Neural Network...")
+    trainer.train_dnn(X_train, y_train, X_val=X_val, y_val=y_val)
+
     # Save models
     for model_name in trainer.trained_models:
         saved_path = trainer.save_model(model_name)
         print(f"[OK] Saved {model_name} model to {saved_path}")
+
+    print("\nEvaluating models on the validation set...")
+    comparison = evaluate_and_compare_models(trainer.trained_models, X_val, y_val)
+    print(comparison.to_string(index=False))
+    print("[OK] Updated model comparison reports in ml_engine/reports.")
 
     print("\n[Step 4/4] Shortage/Surplus Detection & Redistribution...")
     demo_stations = pd.DataFrame([

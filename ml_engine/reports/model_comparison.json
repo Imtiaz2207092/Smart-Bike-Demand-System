@@ -7,6 +7,13 @@
         "R2_Score": 0.9014
     },
     {
+        "Model": "DNN",
+        "MAE": 49.719,
+        "RMSE": 71.1339,
+        "MAPE (%)": 51.62,
+        "R2_Score": 0.8881
+    },
+    {
         "Model": "Random Forest",
         "MAE": 55.3025,
         "RMSE": 83.4985,

@@ -32,13 +32,13 @@ def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
 
 def evaluate_and_compare_models(models_dict: dict, X_test: pd.DataFrame, y_test: pd.Series, reports_dir: str = "ml_engine/reports") -> pd.DataFrame:
     """
-    Evaluates trained models on test set and generates markdown/json reports.
+    Evaluates trained models on a holdout set and generates markdown/json reports.
     """
     os.makedirs(reports_dir, exist_ok=True)
     results = []
 
     for name, model in models_dict.items():
-        y_pred = model.predict(X_test)
+        y_pred = np.asarray(model.predict(X_test)).reshape(-1)
         metrics = calculate_metrics(y_test.values, y_pred)
         metrics["Model"] = name
         results.append(metrics)
