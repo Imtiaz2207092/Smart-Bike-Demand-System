@@ -18,10 +18,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from ml_engine.src.data_cleaning import load_and_clean_data
 from ml_engine.src.feature_engineering import extract_features, get_feature_columns
+from ml_engine.src.evaluation import evaluate_and_compare_models
 from ml_engine.src.models import BikeDemandModelTrainer
 from ml_engine.src.redistribution import detect_shortage_surplus, recommend_redistribution
 
-def run_ml_pipeline():
+def run_ml_pipeline(save_models: bool = True):
     print("=" * 60)
     print("      SMART BIKE DEMAND SYSTEM - ML ENGINE      ")
     print("            Developer: Imtiaj Ahmad (Roll: 2207092)             ")
@@ -60,12 +61,28 @@ def run_ml_pipeline():
     trainer.train_random_forest(X_train, y_train, n_estimators=100, max_depth=12)
     
     print("  - Training Gradient Boosting (XGBoost Regressor)...")
-    trainer.train_xgboost(X_train, y_train, n_estimators=150, learning_rate=0.08, max_depth=6)
+    trainer.train_xgboost(
+        X_train, y_train, n_estimators=150, learning_rate=0.08, max_depth=6,
+        X_val=X_val, y_val=y_val
+    )
 
-    # Save models
-    for model_name in trainer.trained_models:
-        saved_path = trainer.save_model(model_name)
-        print(f"[OK] Saved {model_name} model to {saved_path}")
+    print("  - Training Deep Neural Network...")
+    trainer.train_dnn(X_train, y_train, X_val=X_val, y_val=y_val)
+
+    if save_models:
+        for model_name in trainer.trained_models:
+            saved_path = trainer.save_model(model_name)
+            print(f"[OK] Saved {model_name} model to {saved_path}")
+    else:
+        print("[OK] Existing saved model files were left unchanged.")
+
+    print("\nEvaluating models on the validation set...")
+    comparison = evaluate_and_compare_models(
+        trainer.trained_models, X_val, y_val,
+        training_history=trainer.training_history
+    )
+    print(comparison.to_string(index=False))
+    print("[OK] Updated model comparison reports and offline graphs in ml_engine/reports.")
 
     print("\n[Step 4/4] Shortage/Surplus Detection & Redistribution...")
     demo_stations = pd.DataFrame([
