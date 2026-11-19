@@ -801,8 +801,10 @@ function App() {
                         ['season', 'Season', [
                           ['1', 'Spring'],
                           ['2', 'Summer'],
-                          ['3', 'Fall'],
-                          ['4', 'Winter'],
+                          ['3', 'Rainy'],
+                          ['4', 'Autumn'],
+                          ['5', 'Late Autumn'],
+                          ['6', 'Winter'],
                         ]],
                         ['holiday', 'Holiday', [
                           ['0', 'No'],
@@ -815,8 +817,9 @@ function App() {
                         ['weather', 'Weather', [
                           ['1', 'Clear or partly cloudy'],
                           ['2', 'Mist or cloudy'],
-                          ['3', 'Light rain or snow'],
-                          ['4', 'Heavy rain or snow'],
+                          ['3', 'Light rain'],
+                          ['4', 'Heavy rain'],
+                          ['5', 'Heat Wave']
                         ]],
                       ].map(([name, label, options]) => (
                         <label className="forecast-field" key={name}>

@@ -14,7 +14,7 @@ RECIPIENT_THRESHOLD_PERCENTAGE = 20
 def recommend_forecast_redistribution(
     stations: list[dict[str, Any]],
     is_peak_hour: int,
-) -> dict[str, Any]:
+    ) -> dict[str, Any]:
     """
     Generate forecast-informed transfer suggestions.
 

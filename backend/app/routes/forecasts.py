@@ -10,10 +10,10 @@ router = APIRouter(prefix="/api/forecast", tags=["Forecasting"])
 
 class ForecastRequest(BaseModel):
     datetime: datetime
-    season: int = Field(ge=1, le=4)
+    season: int = Field(ge=1, le=6)
     holiday: int = Field(ge=0, le=1)
     workingday: int = Field(ge=0, le=1)
-    weather: int = Field(ge=1, le=4)
+    weather: int = Field(ge=1, le=5)
     temp: float = Field(ge=0, le=56)
     atemp: float = Field(ge=0, le=60)
     humidity: float = Field(ge=0, le=100)

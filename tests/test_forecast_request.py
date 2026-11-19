@@ -32,14 +32,14 @@ def test_forecast_request_accepts_training_data_upper_bounds():
         forecast_payload(temp=56, atemp=60, windspeed=60)
     )
 
-    assert request.temp == 41
-    assert request.atemp == 50
-    assert request.windspeed == 56.9969
+    assert request.temp == 56
+    assert request.atemp == 60
+    assert request.windspeed == 60
 
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("temp", 41.1), ("atemp", 50.1), ("windspeed", 56.997)],
+    [("temp", 57.1), ("atemp", 63.1), ("windspeed", 60.01)],
 )
 def test_forecast_request_rejects_values_above_dataset_scale(field, value):
     with pytest.raises(ValidationError):

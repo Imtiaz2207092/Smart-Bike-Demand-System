@@ -84,7 +84,7 @@ def _save_metric_chart(comparison_df: pd.DataFrame, output_path: str) -> None:
 
 def _save_prediction_chart(
     y_true: np.ndarray, predictions: dict, output_path: str
-) -> None:
+    ) -> None:
     count = len(predictions)
     columns = 2
     rows = (count + columns - 1) // columns
@@ -110,7 +110,7 @@ def _save_prediction_chart(
 
 def _save_residual_chart(
     y_true: np.ndarray, predictions: dict, output_path: str
-) -> None:
+    ) -> None:
     count = len(predictions)
     columns = 2
     rows = (count + columns - 1) // columns
@@ -159,7 +159,7 @@ def _feature_scores(model, feature_names: list) -> dict:
 
 def _save_feature_chart(
     models_dict: dict, feature_names: list, output_path: str
-) -> None:
+    ) -> None:
     available = [
         (name, _feature_scores(model, feature_names))
         for name, model in models_dict.items()
@@ -355,7 +355,7 @@ def evaluate_and_compare_models(
     y_test: pd.Series,
     reports_dir: str = "ml_engine/reports",
     training_history: dict = None,
-) -> pd.DataFrame:
+    ) -> pd.DataFrame:
     """Evaluate models and write metrics, charts, and a standalone HTML report."""
     os.makedirs(reports_dir, exist_ok=True)
     chart_dir = os.path.join(reports_dir, "figures")
