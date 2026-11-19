@@ -19,9 +19,9 @@ A secure smart bike sharing demand forecasting and redistribution system.
 - Model Monitoring
 - Secure Dashboard
 
-## To run this project
+# To run this project
 
-# Backend:
+## Backend:
 
 ```powershell
 D:
@@ -29,7 +29,7 @@ cd Smart-Bike-Demand-System\backend
 .\venv\Scripts\activate
 python -m uvicorn app.main:app --reload
 ```
-# Frontend:
+## Frontend:
 
 ```powershell
 D:
