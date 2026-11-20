@@ -56,6 +56,66 @@ class BikeDemandModelTrainer:
         self.trained_models['XGBoost'] = model
         return model
 
+    def train_dnn(self,
+                 X_train: pd.DataFrame,
+                 y_train: pd.Series,
+                 X_val: pd.DataFrame = None,
+                 y_val: pd.Series = None,
+                 epochs: int = 100,
+                 batch_size: int = 32):
+            """Trains a Deep Neural Network for bike demand regression."""
+    
+            # Convert data to NumPy arrays
+            X_train_array = X_train.to_numpy(dtype=np.float32)
+            y_train_array = y_train.to_numpy(dtype=np.float32)
+    
+            # Normalize input features using training data only
+            normalizer = tf.keras.layers.Normalization(axis=-1)
+            normalizer.adapt(X_train_array)
+    
+            # Build the Deep Neural Network
+            model = tf.keras.Sequential([
+                tf.keras.Input(shape=(X_train_array.shape[1],)),
+                normalizer,
+                tf.keras.layers.Dense(128, activation="relu"),
+                tf.keras.layers.Dense(64, activation="relu"),
+                tf.keras.layers.Dense(32, activation="relu"),
+                tf.keras.layers.Dense(1, activation="linear")
+            ])
+    
+            model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+                loss="mse",
+                metrics=["mae"]
+            )
+    
+            callbacks = [
+                tf.keras.callbacks.EarlyStopping(
+                    monitor="val_loss" if X_val is not None else "loss",
+                    patience=12,
+                    restore_best_weights=True
+                )
+            ]
+    
+            fit_kwargs = {
+                "epochs": epochs,
+                "batch_size": batch_size,
+                "callbacks": callbacks,
+                "verbose": 1
+            }
+    
+            if X_val is not None and y_val is not None:
+                fit_kwargs["validation_data"] = (
+                    X_val.to_numpy(dtype=np.float32),
+                    y_val.to_numpy(dtype=np.float32)
+                )
+    
+            history = model.fit(X_train_array, y_train_array, **fit_kwargs)
+    
+            self.training_history["DNN"] = history.history
+            self.trained_models["DNN"] = model
+            return model
+
     def save_model(self, model_name: str, filename: str = None) -> str:
         """Saves trained model to disk using joblib."""
         if model_name not in self.trained_models:

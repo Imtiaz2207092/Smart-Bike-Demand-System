@@ -272,7 +272,7 @@ def _write_html_report(
     chart_paths: dict,
     sample_count: int,
     report_path: str,
-) -> None:
+    ) -> None:
     best_model = comparison_df.sort_values(
         ["RMSE", "R2_Score"], ascending=[True, False]
     ).iloc[0]

@@ -1,17 +1,17 @@
 [
     {
-        "Model": "DNN",
-        "MAE": 42.7064,
-        "RMSE": 63.2625,
-        "MAPE (%)": 50.09,
-        "R2_Score": 0.9115
-    },
-    {
         "Model": "XGBoost",
         "MAE": 44.004,
         "RMSE": 66.7494,
         "MAPE (%)": 32.85,
         "R2_Score": 0.9014
+    },
+    {
+        "Model": "DNN",
+        "MAE": 53.3924,
+        "RMSE": 74.8825,
+        "MAPE (%)": 65.3,
+        "R2_Score": 0.876
     },
     {
         "Model": "Random Forest",

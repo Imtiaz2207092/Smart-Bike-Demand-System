@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from ml_engine.src.forecaster import DemandForecaster
 
 
-_model_path = PROJECT_ROOT / "ml_engine" / "models_saved" / "xgboost.joblib"
+_model_path = PROJECT_ROOT / "ml_engine" / "models_saved" / "dnn.keras"
 _forecaster = None
 
 

@@ -34,7 +34,11 @@ class BikeDemandModelTrainer:
         self.trained_models['Linear Regression'] = model
         return model
 
-    def train_random_forest(self, X_train: pd.DataFrame, y_train: pd.Series, n_estimators: int = 150, max_depth: int = 15):
+    def train_random_forest(self,
+                            X_train: pd.DataFrame,
+                            y_train: pd.Series,
+                            n_estimators: int = 150,
+                            max_depth: int = 15):
         """Trains Random Forest Regressor model."""
         model = RandomForestRegressor(
             n_estimators=n_estimators,
@@ -47,7 +51,14 @@ class BikeDemandModelTrainer:
         self.trained_models['Random Forest'] = model
         return model
 
-    def train_xgboost(self, X_train: pd.DataFrame, y_train: pd.Series, n_estimators: int = 200, learning_rate: float = 0.08, max_depth: int = 6, X_val: pd.DataFrame = None, y_val: pd.Series = None):
+    def train_xgboost(self,
+                      X_train: pd.DataFrame,
+                      y_train: pd.Series,
+                      n_estimators: int = 200,
+                      learning_rate: float = 0.08,
+                      max_depth: int = 6,
+                      X_val: pd.DataFrame = None,
+                      y_val: pd.Series = None):
         """Trains XGBoost Regressor model."""
         model = XGBRegressor(
             n_estimators=n_estimators,
@@ -69,7 +80,14 @@ class BikeDemandModelTrainer:
         self.trained_models['XGBoost'] = model
         return model
 
-    def train_dnn(self, X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame = None, y_val: pd.Series = None, epochs: int = 100, batch_size: int = 32):
+    def train_dnn(self,
+                  X_train: pd.DataFrame,
+                  y_train: pd.Series,
+                  X_val: pd.DataFrame = None,
+                  y_val: pd.Series = None,
+                  epochs: int = 100,
+                  batch_size: int = 32,
+                  alpha: float = 0.01):
         """Trains a Deep Neural Network for bike demand regression."""
 
         # Convert data to NumPy arrays
@@ -84,9 +102,12 @@ class BikeDemandModelTrainer:
         model = tf.keras.Sequential([
             tf.keras.Input(shape=(X_train_array.shape[1],)),
             normalizer,
-            tf.keras.layers.Dense(128, activation="relu"),
-            tf.keras.layers.Dense(64, activation="relu"),
-            tf.keras.layers.Dense(32, activation="relu"),
+            tf.keras.layers.Dense(128),
+            tf.keras.layers.LeakyReLU(alpha=0.01),
+            tf.keras.layers.Dense(64),
+            tf.keras.layers.LeakyReLU(alpha=0.01),
+            tf.keras.layers.Dense(32),
+            tf.keras.layers.LeakyReLU(alpha=0.01),
             tf.keras.layers.Dense(1, activation="linear")
         ])
 
