@@ -27,7 +27,9 @@ class BikeDemandModelTrainer:
         self.trained_models = {}
         self.training_history = {}
 
-    def train_linear_regression(self, X_train: pd.DataFrame, y_train: pd.Series):
+    def train_linear_regression(self,
+                                X_train: pd.DataFrame,
+                                y_train: pd.Series):
         """Trains baseline Linear Regression model."""
         model = LinearRegression()
         model.fit(X_train, y_train)
@@ -86,8 +88,7 @@ class BikeDemandModelTrainer:
                   X_val: pd.DataFrame = None,
                   y_val: pd.Series = None,
                   epochs: int = 100,
-                  batch_size: int = 32,
-                  alpha: float = 0.01):
+                  batch_size: int = 32):
         """Trains a Deep Neural Network for bike demand regression."""
 
         # Convert data to NumPy arrays

@@ -26,11 +26,12 @@ MODEL_COLORS = {
 
 
 def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
-    """Calculates MAE, RMSE, MAPE, and R2 score."""
+    """Calculates MAE, MSE, RMSE, MAPE, and R2 score."""
     y_pred = np.clip(y_pred, a_min=0, a_max=None)
 
     mae = mean_absolute_error(y_true, y_pred)
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mse = mean_squared_error(y_true, y_pred)
+    rmse = np.sqrt(mse)
     r2 = r2_score(y_true, y_pred)
 
     non_zero_mask = y_true > 0
@@ -46,6 +47,7 @@ def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
 
     return {
         "MAE": round(float(mae), 4),
+        "MSE": round(float(mse), 4),
         "RMSE": round(float(rmse), 4),
         "MAPE (%)": round(float(mape), 2),
         "R2_Score": round(float(r2), 4),
@@ -55,11 +57,12 @@ def calculate_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
 def _save_metric_chart(comparison_df: pd.DataFrame, output_path: str) -> None:
     metrics = [
         ("MAE", "MAE (bikes)", "Lower is better"),
+        ("MSE", "MSE (bikes²)", "Lower is better"),
         ("RMSE", "RMSE (bikes)", "Lower is better"),
         ("MAPE (%)", "MAPE (%)", "Lower is better*"),
         ("R2_Score", "R² score", "Higher is better"),
     ]
-    fig, axes = plt.subplots(2, 2, figsize=(13, 8))
+    fig, axes = plt.subplots(3, 2, figsize=(13, 11))
 
     for axis, (column, title, direction) in zip(axes.flat, metrics):
         ordered = comparison_df.sort_values(
@@ -75,6 +78,9 @@ def _save_metric_chart(comparison_df: pd.DataFrame, output_path: str) -> None:
         axis.tick_params(axis="x", rotation=18)
         axis.grid(axis="y", alpha=0.2)
         axis.bar_label(bars, fmt="%.3g", padding=3, fontsize=8)
+
+    for axis in axes.flat[len(metrics):]:
+        axis.set_visible(False)
 
     fig.suptitle("Holdout performance comparison", fontsize=16, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
@@ -281,7 +287,8 @@ def _write_html_report(
         rows.append(
             "<tr>"
             f"<th scope='row'>{html.escape(str(row['Model']))}</th>"
-            f"<td>{row['MAE']:.4f}</td><td>{row['RMSE']:.4f}</td>"
+            f"<td>{row['MAE']:.4f}</td><td>{row['MSE']:.4f}</td>"
+            f"<td>{row['RMSE']:.4f}</td>"
             f"<td>{row['MAPE (%)']:.2f}%</td><td>{row['R2_Score']:.4f}</td>"
             "</tr>"
         )
@@ -325,12 +332,12 @@ code{{background:#eef3f8;padding:2px 5px;border-radius:4px}}footer{{padding:12px
 <p class="muted">পরীক্ষিত holdout observation: {sample_count:,}। চার্টগুলো এই HTML ফাইলেই যুক্ত; ইন্টারনেট ছাড়াই খুলবে।</p>
 </header>
 <div class="card winner"><h2>সেরা ফল (RMSE অনুযায়ী)</h2>
-<p><strong>{html.escape(str(best_model['Model']))}</strong> — RMSE {best_model['RMSE']:.4f}, MAE {best_model['MAE']:.4f}, R² {best_model['R2_Score']:.4f}।
+<p><strong>{html.escape(str(best_model['Model']))}</strong> — RMSE {best_model['RMSE']:.4f}, MSE {best_model['MSE']:.4f}, MAE {best_model['MAE']:.4f}, R² {best_model['R2_Score']:.4f}।
 কম RMSE মানে বড় prediction error কম; R² 1-এর কাছাকাছি হলে demand variation ভালো ব্যাখ্যা হয়।</p></div>
 <section><h2>মডেল তুলনার পরিমাপ</h2>
-<table><thead><tr><th>Model</th><th>MAE ↓</th><th>RMSE ↓</th><th>MAPE ↓</th><th>R² ↑</th></tr></thead>
+<table><thead><tr><th>Model</th><th>MAE ↓</th><th>MSE ↓</th><th>RMSE ↓</th><th>MAPE ↓</th><th>R² ↑</th></tr></thead>
 <tbody>{''.join(rows)}</tbody></table>
-<p class="muted">MAE/RMSE-এর একক bike। MAPE শূন্য actual demand বাদ দিয়ে হিসাব করা; খুব কম actual demand-এ এটি তুলনামূলক বেশি হতে পারে।</p></section>
+<p class="muted">MAE/RMSE-এর একক bike এবং MSE-এর একক bike²। MAPE শূন্য actual demand বাদ দিয়ে হিসাব করা; খুব কম actual demand-এ এটি তুলনামূলক বেশি হতে পারে।</p></section>
 <section class="card"><h2>কোন মডেল কেন ভালো?</h2>
 <ul>
 <li><strong>Linear Regression:</strong> ordinary least squares-এ squared residual-এর যোগফল (RSS) কমায়। সহজে ব্যাখ্যা করা যায়, তবে জটিল non-linear demand pattern ধরতে সীমাবদ্ধ।</li>
@@ -373,7 +380,7 @@ def evaluate_and_compare_models(
         predictions[name] = y_pred
 
     comparison_df = pd.DataFrame(results)[
-        ["Model", "MAE", "RMSE", "MAPE (%)", "R2_Score"]
+        ["Model", "MAE", "MSE", "RMSE", "MAPE (%)", "R2_Score"]
     ]
     comparison_df = comparison_df.sort_values(by="RMSE", ascending=True).reset_index(drop=True)
 

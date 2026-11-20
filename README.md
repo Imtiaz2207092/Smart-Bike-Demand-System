@@ -37,7 +37,16 @@ cd Smart-Bike-Demand-System\vite
 npm run dev
 ```
 
-## Model evaluation graphs
+### Model Library Install and Run
+
+```powershell
+D:
+cd Smart-Bike-Demand-System
+python -m pip install pandas tensorflow matplotlib xgboost tabulate scikit-learn
+python ml_engine\main.py
+```
+
+## Model Evaluation Graphs
 
 From the project root, install the ML requirements and run the training/evaluation
 pipeline to regenerate the holdout metrics, graph images, and standalone report:

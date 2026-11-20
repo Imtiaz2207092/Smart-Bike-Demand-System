@@ -2,20 +2,23 @@
     {
         "Model": "XGBoost",
         "MAE": 44.004,
+        "MSE": 4455.4766,
         "RMSE": 66.7494,
         "MAPE (%)": 32.85,
         "R2_Score": 0.9014
     },
     {
         "Model": "DNN",
-        "MAE": 53.3924,
-        "RMSE": 74.8825,
-        "MAPE (%)": 65.3,
-        "R2_Score": 0.876
+        "MAE": 47.9158,
+        "MSE": 4683.5732,
+        "RMSE": 68.4366,
+        "MAPE (%)": 53.09,
+        "R2_Score": 0.8964
     },
     {
         "Model": "Random Forest",
         "MAE": 55.3025,
+        "MSE": 6971.9932,
         "RMSE": 83.4985,
         "MAPE (%)": 27.06,
         "R2_Score": 0.8458
@@ -23,6 +26,7 @@
     {
         "Model": "Linear Regression",
         "MAE": 89.9683,
+        "MSE": 14619.9581,
         "RMSE": 120.913,
         "MAPE (%)": 181.06,
         "R2_Score": 0.6766

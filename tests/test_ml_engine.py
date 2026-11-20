@@ -41,6 +41,7 @@ def test_metrics_calculation():
     y_pred = np.array([12, 18, 32, 38, 52])
     metrics = calculate_metrics(y_true, y_pred)
     assert metrics['MAE'] == 2.0
+    assert metrics['MSE'] == 4.0
 
 
 def test_model_comparison_flattens_dnn_predictions(tmp_path):
@@ -66,8 +67,10 @@ def test_model_comparison_flattens_dnn_predictions(tmp_path):
 
     assert comparison.loc[0, 'Model'] == 'DNN'
     assert comparison.loc[0, 'MAE'] == 2.0
+    assert comparison.loc[0, 'MSE'] == 4.0
     report = pd.read_json(tmp_path / 'model_comparison.json')
     assert report.loc[0, 'Model'] == 'DNN'
+    assert report.loc[0, 'MSE'] == 4.0
     assert (tmp_path / 'model_report.html').is_file()
     assert (tmp_path / 'figures' / 'model_metrics.png').is_file()
     assert (tmp_path / 'figures' / 'actual_vs_predicted.png').is_file()
@@ -77,6 +80,8 @@ def test_model_comparison_flattens_dnn_predictions(tmp_path):
     html_report = (tmp_path / 'model_report.html').read_text(encoding='utf-8')
     assert 'data:image/png;base64,' in html_report
     assert 'Loss and validation learning curves' in html_report
+    assert '<th>MSE ↓</th>' in html_report
+    assert '<td>4.0000</td>' in html_report
     assert 'একই holdout data' in html_report
 
 

@@ -879,7 +879,7 @@ button {
 
 .intelligence-metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   margin-top: 16px;
   padding: 11px 0;
   border-top: 1px solid rgba(233, 244, 231, .12);
@@ -2405,7 +2405,7 @@ button {
   }
 
   .model-table {
-    min-width: 650px;
+    min-width: 760px;
   }
 
   .model-table-footer {
